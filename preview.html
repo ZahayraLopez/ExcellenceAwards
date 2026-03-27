@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tendencys Commercial Excellence</title>
+  <style>
+    :root{
+      --orange:#ff5a00;
+      --blue:#005b96;
+      --cyan:#00bfd6;
+      --green:#84bd00;
+      --purple:#7b3fa0;
+      --bg:#08111f;
+      --panel:#0f1b2e;
+      --line:rgba(255,255,255,.08);
+      --text:#eef4ff;
+      --muted:#9fb0c9;
+    }
+    *{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(180deg,#07101b,#0b1422 50%,#09111c);color:var(--text)}
+    .wrap{max-width:1400px;margin:0 auto;padding:24px}
+    .tabs{display:flex;gap:12px;margin-bottom:20px}.tab{padding:12px 18px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);cursor:pointer;font-weight:700}.tab.active{background:var(--orange)}
+    .hero,.grid2,.layout{display:grid;gap:18px}.hero{grid-template-columns:1.3fr .7fr}.grid2{grid-template-columns:1fr .9fr}.layout{grid-template-columns:1.4fr .6fr}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:22px;padding:22px}
+    .heroMain{background:linear-gradient(135deg,rgba(0,191,214,.15),transparent 30%),linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.015))}
+    .eyebrow{display:inline-block;padding:8px 12px;border-radius:999px;background:rgba(0,191,214,.1);color:#8cd6ff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.12em}
+    h1{margin:14px 0 6px;font-size:42px;line-height:1;text-transform:uppercase}.sub{color:var(--muted)}
+    .status{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);font-size:13px;color:#c6d3e7}
+    .topName{font-size:30px;font-weight:900;color:#fff2cb}.topMeta{color:var(--muted);margin-top:4px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}.stat{padding:18px}.small{font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:700}.big{font-size:34px;font-weight:900;margin-top:10px}
+    .toolbar{display:grid;grid-template-columns:1fr 220px 220px;gap:12px}.input,.select,.btn{width:100%;padding:13px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text)} .btn{cursor:pointer;font-weight:700}.btn.primary{background:var(--blue)}.btn.green{background:var(--green);color:#102100}.btn.orange{background:var(--orange)}
+    .rows{display:grid;gap:14px}.row{padding:16px;border-radius:20px;border:1px solid var(--line);background:rgba(0,0,0,.14)}.rowGrid{display:grid;grid-template-columns:90px 1fr 300px;gap:16px;align-items:start}
+    .rank{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:rgba(255,255,255,.08);font-weight:900}.rank.top{background:var(--orange)} .personName{font-size:18px;font-weight:900}.personMeta{font-size:13px;color:var(--muted);margin-top:4px}
+    .lane{padding:14px;border-radius:18px;border:1px solid rgba(0,191,214,.16);background:rgba(2,6,23,.75)} .laneHead{display:flex;justify-content:space-between;font-size:11px;color:#8cd6ff;text-transform:uppercase;font-weight:700;letter-spacing:.12em;margin-bottom:10px}
+    .roadWrap{position:relative;height:92px;border-radius:24px;border:1px solid var(--line);background:linear-gradient(90deg,#111827,#1f2937,#111827);overflow:hidden}.road{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);height:46px;border-radius:999px;background:rgba(71,85,105,.6);border:1px solid rgba(148,163,184,.2)}.roadLine{position:absolute;left:28px;right:28px;top:50%;transform:translateY(-50%);border-top:2px dashed rgba(0,191,214,.4)}.roadFill{position:absolute;left:16px;top:50%;transform:translateY(-50%);height:46px;border-radius:999px;background:linear-gradient(90deg,rgba(0,191,214,.28),rgba(132,189,0,.24),rgba(255,90,0,.22))}
+    .checkpoint{position:absolute;top:50%;transform:translate(-50%,-50%)} .dot{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:#0f172a;border:1px solid rgba(0,191,214,.18);color:var(--cyan)} .vehicle{position:absolute;top:50%;transform:translate(-50%,-50%);background:var(--orange);padding:10px 12px;border-radius:16px;color:white;font-size:12px;font-weight:900}
+    .laneMeta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.pill{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+    .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.badge{padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid transparent}.b1{background:rgba(255,90,0,.12);color:#ffb088;border-color:rgba(255,90,0,.28)}.b2{background:rgba(0,95,150,.18);color:#8cd6ff;border-color:rgba(0,191,214,.28)}.b3{background:rgba(132,189,0,.16);color:#d6f28a;border-color:rgba(132,189,0,.28)}.b4{background:rgba(123,63,160,.16);color:#e0b7f5;border-color:rgba(123,63,160,.28)}
+    .score{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.scoreBox{padding:14px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid var(--line);text-align:center}.scoreBox .n{font-size:28px;font-weight:900;margin-top:8px}
+    .hidden{display:none}.adminGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.full{grid-column:1/-1}.info{padding:14px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+    @media (max-width:1100px){.hero,.grid2,.layout,.rowGrid,.toolbar,.stats,.adminGrid{grid-template-columns:1fr 1fr}} @media (max-width:760px){.hero,.grid2,.layout,.rowGrid,.toolbar,.stats,.adminGrid,.score,.laneMeta{grid-template-columns:1fr} h1{font-size:32px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" id="tabBoard">Tablero</button>
+      <button class="tab" id="tabAdmin">Administrador</button>
+      <button class="tab" id="tabTv">Modo TV</button>
+    </div>
+
+    <div class="hero">
+      <div class="card heroMain">
+        <div class="eyebrow">Tendencys Commercial Excellence</div>
+        <h1>Dashboard interactivo</h1>
+        <div class="sub">Ruta de entregas, sincronización con Google Sheets, captura manual y carga por archivo.</div>
+      </div>
+      <div class="card">
+        <div class="small">Top Performer</div>
+        <div id="topPerformer"></div>
+        <div class="status" id="status">Usando datos demo.</div>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <section id="boardView">
+      <div class="card" style="margin-bottom:18px">
+        <div class="toolbar">
+          <input id="search" class="input" placeholder="Buscar por nombre, rol o servicio">
+          <select id="roleFilter" class="select"><option value="all">Todos los roles</option><option>SDR</option><option>MDR</option><option>BDR</option><option>AE</option></select>
+          <select id="sortBy" class="select"><option value="score">Ordenar por Score</option><option value="meta">% Meta</option><option value="hp">HP</option><option value="cross">Cross-Service</option><option value="bell">Bell</option></select>
+        </div>
+      </div>
+      <div class="layout">
+        <div class="card"><div class="rows" id="boardRows"></div></div>
+        <div class="card"><div class="small">Record Award</div><div id="recordBox"></div></div>
+      </div>
+    </section>
+
+    <section id="adminView" class="hidden">
+      <div class="grid2">
+        <div class="card">
+          <div class="small">Administrador</div>
+          <div class="adminGrid" style="margin-top:14px">
+            <div class="full info">
+              <div class="small">Clave de administrador</div>
+              <div style="display:flex;gap:10px;margin-top:8px"><input id="newPass" class="input" placeholder="Nueva contraseña"><button id="savePass" class="btn orange">Guardar</button></div>
+            </div>
+            <input id="mNombre" class="input" placeholder="Nombre"><select id="mRol" class="select"><option>SDR</option><option>MDR</option><option>BDR</option><option>AE</option></select><input id="mServicio" class="input" placeholder="Puesto o servicio"><input id="mMeta" class="input" placeholder="% meta"><input id="mHp" class="input" placeholder="HP"><input id="mCross" class="input" placeholder="Servicios extra"><input id="mBell" class="input" placeholder="Bell steps"><input id="mAwards" class="input" placeholder="Awards: double,record,cross,bell">
+            <div class="full"><button id="addBtn" class="btn green">Añadir colaborador</button></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="small">Fuentes de datos</div>
+          <div class="info" style="margin-top:14px">
+            <div class="small">Google Sheets</div>
+            <input id="sheetUrl" class="input" placeholder="Pega aquí la URL pública" style="margin-top:10px">
+            <div style="display:flex;gap:10px;margin-top:10px"><button id="loadSheet" class="btn primary">Cargar hoja</button><button id="toggleSync" class="btn">Activar auto-sync</button><input id="syncSec" class="input" value="60" style="max-width:120px"></div>
+          </div>
+          <div class="info" style="margin-top:14px">
+            <div class="small">Archivo CSV</div>
+            <label class="btn" style="display:block;text-align:center;margin-top:10px">Seleccionar CSV<input id="csvFile" type="file" accept=".csv" style="display:none"></label>
+            <button id="restoreDemo" class="btn" style="margin-top:10px">Restaurar demo</button>
+          </div>
+          <div class="info" style="margin-top:14px">
+            <div class="small">Record Award mensual</div>
+            <input id="recordMonth" class="input" placeholder="Periodo" style="margin-top:10px">
+            <input id="recordChallenge" class="input" placeholder="Reto vigente" style="margin-top:10px">
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px"><div class="rows" id="adminRows"></div></div>
+    </section>
+
+    <section id="tvInlineView" class="hidden"></section>
+  </div>
+
+  <script>
+    const DEFAULT_PASSWORD = 'tendencys';
+    const STORAGE_KEY = 'tendencys-dashboard-html-v2';
+    const PASS_KEY = 'tendencys-dashboard-pass-v2';
+    let rows = [...JSON.parse(JSON.stringify([{id:1,nombre:'Ana P.',rol:'SDR',servicio:'Freight',porcentajeMeta:210,hp:18,serviciosExtra:3,bellSteps:3,awards:'double,bell'},{id:2,nombre:'Carlos R.',rol:'MDR',servicio:'Parcel',porcentajeMeta:165,hp:32,serviciosExtra:1,bellSteps:2,awards:'record'},{id:3,nombre:'Laura M.',rol:'SDR',servicio:'Cross Sell',porcentajeMeta:145,hp:14,serviciosExtra:4,bellSteps:2,awards:'cross'},{id:4,nombre:'Jorge S.',rol:'MDR',servicio:'Air',porcentajeMeta:188,hp:28,serviciosExtra:2,bellSteps:1,awards:''}]))];
+    const demoRows = JSON.parse(JSON.stringify(rows));
+    let recordMonth = 'Marzo 2026';
+    let recordChallenge = 'Primero en llegar al reto definido del mes';
+    let adminPassword = localStorage.getItem(PASS_KEY) || DEFAULT_PASSWORD;
+    let adminUnlocked = false;
+    let activeTab = 'board';
+    let tvMode = false;
+    let editingId = null;
+    let autoSync = false;
+    let syncTimer = null;
+
+    const els = {
+      top: document.getElementById('topPerformer'), status: document.getElementById('status'), stats: document.getElementById('stats'), boardRows: document.getElementById('boardRows'), adminRows: document.getElementById('adminRows'), recordBox: document.getElementById('recordBox'),
+      tabBoard: document.getElementById('tabBoard'), tabAdmin: document.getElementById('tabAdmin'), boardView: document.getElementById('boardView'), adminView: document.getElementById('adminView'),
+      search: document.getElementById('search'), roleFilter: document.getElementById('roleFilter'), sortBy: document.getElementById('sortBy'),
+      mNombre: document.getElementById('mNombre'), mRol: document.getElementById('mRol'), mServicio: document.getElementById('mServicio'), mMeta: document.getElementById('mMeta'), mHp: document.getElementById('mHp'), mCross: document.getElementById('mCross'), mBell: document.getElementById('mBell'), mAwards: document.getElementById('mAwards'),
+      addBtn: document.getElementById('addBtn'), sheetUrl: document.getElementById('sheetUrl'), loadSheet: document.getElementById('loadSheet'), toggleSync: document.getElementById('toggleSync'), syncSec: document.getElementById('syncSec'), csvFile: document.getElementById('csvFile'), restoreDemo: document.getElementById('restoreDemo'),
+      recordMonth: document.getElementById('recordMonth'), recordChallenge: document.getElementById('recordChallenge'), newPass: document.getElementById('newPass'), savePass: document.getElementById('savePass')
+    };
+
+    function setStatus(t){els.status.textContent=t}
+    function toNumber(v){const n=Number(v); return Number.isFinite(n)?n:0}
+    function score(r){return r.porcentajeMeta*.5+r.hp*3+r.serviciosExtra*20+r.bellSteps*25}
+    function awardsList(v){return String(v||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean)}
+    function badges(r){const a=awardsList(r.awards); const out=[]; if(r.porcentajeMeta>=200||a.includes('double'))out.push(['Double','b1']); if(a.includes('record'))out.push(['Record','b2']); if(r.serviciosExtra>=2||a.includes('cross'))out.push(['Cross','b3']); if(r.bellSteps>=1||a.includes('bell'))out.push([`Bell ${r.bellSteps}/3`,'b4']); return out}
+    function parseCsv(text){const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean); if(lines.length<2)return[]; const headers=lines[0].split(',').map(h=>h.trim().toLowerCase()); return lines.slice(1).map((line,i)=>{const cells=line.split(','); const o={}; headers.forEach((h,idx)=>o[h]=(cells[idx]||'').trim()); return {id:Date.now()+i,nombre:o.nombre||`Colaborador ${i+1}`,rol:o.rol||'SDR',servicio:o.servicio||'General',porcentajeMeta:toNumber(o.porcentajemeta),hp:toNumber(o.hp),serviciosExtra:toNumber(o.serviciosextra),bellSteps:toNumber(o.bellsteps),awards:o.awards||''};});}
+    function csvUrl(u){try{const url=new URL(u); const parts=url.pathname.split('/'); const idx=parts.indexOf('d'); if(idx===-1||!parts[idx+1]) return u; return `https://docs.google.com/spreadsheets/d/${parts[idx+1]}/export?format=csv&gid=${url.searchParams.get('gid')||'0'}`;}catch{return u}}
+    function lane(r,compact=false){const p=Math.max(6,Math.min(100,r.porcentajeMeta/2.5+r.bellSteps*4)); const checks=[18,40,62,84,96]; return `<div class="lane"><div class="laneHead"><span>Ruta de entregas</span><span>${Math.round(p)}%</span></div><div class="roadWrap"><div class="road"></div><div class="roadLine"></div><div class="roadFill" style="width:${p}%"></div>${checks.map((c,i)=>`<div class="checkpoint" style="left:${c}%"><div class="dot">${i===checks.length-1?'🔔':'📦'}</div></div>`).join('')}<div class="vehicle" style="left:${p}%">${r.rol==='MDR'?'🚚 Camión':'📦 Paquete'}</div></div>${compact?'':`<div class="laneMeta"><div class="pill">Meta: ${r.porcentajeMeta}%</div><div class="pill">Cross: ${r.serviciosExtra}</div><div class="pill">Bell: ${r.bellSteps}/3</div></div>`}</div>`}
+    function filtered(){const q=els.search.value.toLowerCase(); return [...rows].filter(r=>`${r.nombre} ${r.rol} ${r.servicio}`.toLowerCase().includes(q)&& (els.roleFilter.value==='all'||r.rol===els.roleFilter.value)).sort((a,b)=>{if(els.sortBy.value==='score')return score(b)-score(a); if(els.sortBy.value==='meta')return b.porcentajeMeta-a.porcentajeMeta; if(els.sortBy.value==='hp')return b.hp-a.hp; if(els.sortBy.value==='cross')return b.serviciosExtra-a.serviciosExtra; return b.bellSteps-a.bellSteps;});}
+    function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify({rows,recordMonth,recordChallenge,sheetUrl:els.sheetUrl.value,autoSync,syncSec:els.syncSec.value})); localStorage.setItem(PASS_KEY,adminPassword)}
+    function load(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'); if(s){if(s.rows)rows=s.rows; if(s.recordMonth)recordMonth=s.recordMonth; if(s.recordChallenge)recordChallenge=s.recordChallenge; if(s.sheetUrl)els.sheetUrl.value=s.sheetUrl; if(s.syncSec)els.syncSec.value=s.syncSec; if(typeof s.autoSync==='boolean') autoSync=s.autoSync;} }catch{}}
+    async function loadSheet(silent=false){const u=els.sheetUrl.value.trim(); if(!u)return; try{const res=await fetch(csvUrl(u)); const text=await res.text(); const parsed=parseCsv(text); if(!parsed.length){if(!silent)setStatus('La hoja no devolvió datos válidos.'); return;} rows=parsed; save(); render(); if(!silent)setStatus('Google Sheets cargado correctamente.');}catch{if(!silent)setStatus('No se pudo cargar la hoja. Verifica que sea pública.')}}
+    function setAutoSync(on){autoSync=on; if(syncTimer) clearInterval(syncTimer); if(autoSync){const sec=Math.max(15,toNumber(els.syncSec.value)||60); syncTimer=setInterval(()=>loadSheet(true),sec*1000);} els.toggleSync.textContent=autoSync?'Auto-sync activo':'Activar auto-sync'; save();}
+    function renderTabs(){
+      els.tabBoard.classList.toggle('active',activeTab==='board' && !tvMode);
+      els.tabAdmin.classList.toggle('active',activeTab==='admin' && !tvMode);
+      if (els.tabTv) els.tabTv.classList.toggle('active',tvMode);
+      els.boardView.classList.toggle('hidden',activeTab!=='board' || tvMode);
+      els.adminView.classList.toggle('hidden',activeTab!=='admin' || tvMode);
+      let tv = document.getElementById('tvInlineView');
+      if (tv) tv.classList.toggle('hidden', !tvMode);
+    }
+    function renderTop(){const top=filtered()[0]; els.top.innerHTML=top?`<div class="topName">${top.nombre}</div><div class="topMeta">${top.rol} · ${top.servicio}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px"><div class="info"><div class="small">Meta</div><div class="big" style="font-size:28px">${top.porcentajeMeta}%</div></div><div class="info"><div class="small">Bell</div><div class="big" style="font-size:28px">${top.bellSteps}/3</div></div></div><div class="badges">${badges(top).map(b=>`<span class="badge ${b[1]}">${b[0]}</span>`).join('')}</div>`:'<div class="topName">Sin datos</div>'}
+    function renderStats(){const cards=[['Double Performance',rows.filter(r=>r.porcentajeMeta>=200).length,'200%+ de meta'],['Record Award',rows.filter(r=>awardsList(r.awards).includes('record')).length,'Ganadores del mes'],['Cross-Service',rows.filter(r=>r.serviciosExtra>=2).length,'2+ servicios extra'],['Bell Bonus',rows.filter(r=>r.bellSteps>=3).length,'3 escalones completos']]; els.stats.innerHTML=cards.map(c=>`<div class="card stat"><div class="small">${c[0]}</div><div class="big">${c[1]}</div><div class="sub">${c[2]}</div></div>`).join('')}
+    function renderRecord(){els.recordBox.innerHTML=`<div class="big" style="font-size:26px">${recordMonth}</div><div class="sub" style="margin-top:8px">${recordChallenge}</div>`; els.recordMonth.value=recordMonth; els.recordChallenge.value=recordChallenge}
+    function renderBoard(){const list=filtered(); els.boardRows.innerHTML=list.map((r,i)=>`<div class="row"><div class="rowGrid"><div><div class="rank ${i===0?'top':''}">#${i+1}</div><div class="personName" style="margin-top:10px">${r.nombre}</div><div class="personMeta">${r.rol} · ${r.servicio}</div></div><div>${lane(r)}<div class="badges">${(badges(r).map(b=>`<span class="badge ${b[1]}">${b[0]}</span>`).join('')||'<span class="badge">Sin insignias aún</span>')}</div></div><div class="score"><div class="scoreBox"><div class="small">HP</div><div class="n">${r.hp}</div></div><div class="scoreBox"><div class="small">Cross</div><div class="n">${r.serviciosExtra}</div></div><div class="scoreBox"><div class="small">Score</div><div class="n">${Math.round(score(r))}</div></div></div></div></div>`).join('')}
+    function renderAdmin(){els.adminRows.innerHTML=filtered().map((r,i)=> editingId===r.id ? `<div class="row"><div class="adminGrid"><input class="input" id="eNombre" value="${r.nombre}"><select class="select" id="eRol"><option ${r.rol==='SDR'?'selected':''}>SDR</option><option ${r.rol==='MDR'?'selected':''}>MDR</option><option ${r.rol==='BDR'?'selected':''}>BDR</option><option ${r.rol==='AE'?'selected':''}>AE</option></select><input class="input" id="eServicio" value="${r.servicio}"><input class="input" id="eMeta" value="${r.porcentajeMeta}"><input class="input" id="eHp" value="${r.hp}"><input class="input" id="eCross" value="${r.serviciosExtra}"><input class="input" id="eBell" value="${r.bellSteps}"><input class="input" id="eAwards" value="${r.awards}"><div class="full" style="display:grid;gap:10px"><button class="btn primary" onclick="saveEdit(${r.id})">Guardar cambios</button><button class="btn" onclick="cancelEdit()">Cancelar edición</button><button class="btn" style="background:rgba(255,107,107,.12);color:#ffb8b8" onclick="removeRow(${r.id})">Eliminar</button></div></div></div>` : `<div class="row"><div class="rowGrid"><div><div class="rank ${i===0?'top':''}">#${i+1}</div><div class="personName" style="margin-top:10px">${r.nombre}</div><div class="personMeta">${r.rol} · ${r.servicio}</div></div><div>${lane(r)}</div><div style="display:grid;gap:10px"><button class="btn" onclick="startEdit(${r.id})">Editar colaborador</button><button class="btn" style="background:rgba(255,107,107,.12);color:#ffb8b8" onclick="removeRow(${r.id})">Eliminar</button></div></div></div>`).join('')}
+    function renderTvInline(){
+      let tv = document.getElementById('tvInlineView');
+      if(!tv) return;
+      const list=[...rows].sort((a,b)=>score(b)-score(a));
+      tv.innerHTML=`<div class="card heroMain" style="margin-bottom:18px"><div class="eyebrow">Tendencys Commercial Excellence</div><h1>TV Board</h1><div class="sub">${recordMonth} · ${recordChallenge}</div></div><div class="rows">${list.map((r,i)=>`<div class="row"><div class="rowGrid"><div><div class="rank ${i===0?'top':''}">#${i+1}</div><div class="personName" style="margin-top:10px">${r.nombre}</div><div class="personMeta">${r.rol} · ${r.servicio}</div></div><div>${lane(r,true)}<div class="badges">${(badges(r).map(b=>`<span class="badge ${b[1]}">${b[0]}</span>`).join('')||'<span class="badge">Sin insignias aún</span>')}</div></div><div class="score"><div class="scoreBox"><div class="small">HP</div><div class="n">${r.hp}</div></div><div class="scoreBox"><div class="small">Cross</div><div class="n">${r.serviciosExtra}</div></div><div class="scoreBox"><div class="small">Score</div><div class="n">${Math.round(score(r))}</div></div></div></div></div>`).join('')}</div>`;
+    }
+    function render(){renderTabs(); renderTop(); renderStats(); renderRecord(); renderBoard(); renderAdmin(); renderTvInline();}
+    function startEdit(id){editingId=id; render(); setStatus('Editando colaborador.')} window.startEdit=startEdit;
+    function cancelEdit(){editingId=null; render(); setStatus('Edición cancelada.')} window.cancelEdit=cancelEdit;
+    function saveEdit(id){const idx=rows.findIndex(r=>r.id===id); if(idx<0)return; const nombre=document.getElementById('eNombre').value.trim(); if(!nombre){setStatus('El nombre es obligatorio.'); return;} rows[idx]={...rows[idx],nombre,rol:document.getElementById('eRol').value,servicio:document.getElementById('eServicio').value.trim()||'General',porcentajeMeta:toNumber(document.getElementById('eMeta').value),hp:toNumber(document.getElementById('eHp').value),serviciosExtra:toNumber(document.getElementById('eCross').value),bellSteps:toNumber(document.getElementById('eBell').value),awards:document.getElementById('eAwards').value.trim()}; editingId=null; save(); render(); setStatus('Cambios guardados.')} window.saveEdit=saveEdit;
+    function removeRow(id){rows=rows.filter(r=>r.id!==id); if(editingId===id) editingId=null; save(); render(); setStatus('Colaborador eliminado.')} window.removeRow=removeRow;
+
+    els.tabBoard.onclick=()=>{tvMode=false; activeTab='board'; render()};
+    els.tabAdmin.onclick=()=>{if(!adminUnlocked){const p=prompt('Ingresa clave de administrador'); if(p!==adminPassword){if(p!==null) alert('Clave incorrecta'); return;} adminUnlocked=true;} tvMode=false; activeTab='admin'; render()};
+    const tabTv = document.getElementById('tabTv');
+    if (tabTv) tabTv.onclick=()=>{tvMode=true; render();};
+    [els.search,els.roleFilter,els.sortBy].forEach(el=>el.oninput=render); els.roleFilter.onchange=render; els.sortBy.onchange=render;
+    els.addBtn.onclick=()=>{if(!els.mNombre.value.trim()){setStatus('Escribe el nombre del colaborador.'); return;} rows.push({id:Date.now(),nombre:els.mNombre.value.trim(),rol:els.mRol.value,servicio:els.mServicio.value.trim()||'General',porcentajeMeta:toNumber(els.mMeta.value),hp:toNumber(els.mHp.value),serviciosExtra:toNumber(els.mCross.value),bellSteps:toNumber(els.mBell.value),awards:els.mAwards.value.trim()}); ['mNombre','mServicio','mMeta','mHp','mCross','mBell','mAwards'].forEach(k=>els[k].value=''); els.mMeta.value='0'; els.mHp.value='0'; els.mCross.value='0'; els.mBell.value='0'; save(); render(); setStatus('Colaborador agregado.');};
+    els.loadSheet.onclick=()=>loadSheet(false); els.toggleSync.onclick=()=>setAutoSync(!autoSync); els.csvFile.onchange=async e=>{const f=e.target.files[0]; if(!f)return; const t=await f.text(); const parsed=parseCsv(t); if(!parsed.length){setStatus('No se pudo leer el CSV.'); return;} rows=parsed; save(); render(); setStatus('Archivo cargado: '+f.name)}; els.restoreDemo.onclick=()=>{rows=JSON.parse(JSON.stringify(demoRows)); save(); render(); setStatus('Se restauraron los datos demo.')};
+    els.recordMonth.oninput=()=>{recordMonth=els.recordMonth.value; save(); renderRecord()}; els.recordChallenge.oninput=()=>{recordChallenge=els.recordChallenge.value; save(); renderRecord()};
+    els.savePass.onclick=()=>{if(!els.newPass.value.trim()) return; adminPassword=els.newPass.value.trim(); els.newPass.value=''; save(); setStatus('Contraseña actualizada.');};
+    els.syncSec.oninput=()=>{save(); if(autoSync) setAutoSync(true)};
+    load();
+    if(new URLSearchParams(location.search).get('view')==='tv'){ tvMode = true; }
+    setAutoSync(autoSync);
+    render();
+  </script>
+</body>
+</html>
