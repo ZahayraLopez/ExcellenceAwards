@@ -640,15 +640,47 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
             <option value="1">✅ Elegible Double</option>
             <option value="0">❌ No elegible Double</option>
           </select>
-          <input id="mBellAward"    class="input" type="number" placeholder="Bell: Award (0-3)" value="0" min="0" max="3">
-          <input id="mBellLine"     class="input" type="number" placeholder="Bell: Línea (0-3)" value="0" min="0" max="3">
-          <input id="mBellRecharge" class="input" type="number" placeholder="Bell: Recarga (0-3)" value="0" min="0" max="3">
-          <input id="mAwards"       class="input" placeholder="Awards: record,cross…">
-          <div class="full" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div class="small" style="margin-bottom:5px">Fecha alcanzó 200%</div>
+            <input id="mFechaDoble" class="input" type="date" title="Fecha en que alcanzó 200% de meta (para orden de llegada)">
+          </div>
+          <div>
+            <div class="small" style="margin-bottom:5px">Bell: Línea adicional</div>
+            <input id="mBellLine"   class="input" type="number" value="0" min="0" max="3" placeholder="0-3">
+          </div>
+          <div>
+            <div class="small" style="margin-bottom:5px">Estado Bell</div>
+            <select id="mBellEstado" class="select">
+              <option value="activo">🔔 Activo</option>
+              <option value="completado-pendiente">🕐 Completado — pendiente pago</option>
+              <option value="completado-pagado">✅ Completado — bono pagado</option>
+            </select>
+          </div>
+          <input id="mAwards"       class="input" placeholder="Awards extra: record,cross…">
+        </div>
+
+        <div class="sep"></div>
+        <div class="small" style="margin-bottom:8px">💰 Recargas &gt;$100,000 MXN</div>
+        <div id="mRecargasList" style="margin-bottom:8px;display:grid;gap:6px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+          <div>
+            <div class="small" style="margin-bottom:4px">Fecha</div>
+            <input id="mRecFecha" class="input" type="date">
+          </div>
+          <div>
+            <div class="small" style="margin-bottom:4px">Monto ($MXN)</div>
+            <input id="mRecMonto" class="input" type="number" min="0" placeholder="Ej. 150000">
+          </div>
+          <div>
+            <div class="small" style="margin-bottom:4px">Cliente</div>
+            <input id="mRecCliente" class="input" placeholder="Nombre empresa">
+          </div>
+          <button id="mRecAddBtn" class="btn green" style="padding:11px 14px;width:auto">+</button>
+        </div>
+        <div class="full" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
             <button id="addBtn" class="btn green">+ Añadir colaborador</button>
             <button id="cancelEditBtn" class="btn hidden">✕ Cancelar edición</button>
           </div>
-        </div>
       </div>
 
       <!-- Lista colaboradores -->
@@ -924,17 +956,25 @@ const DEFAULT_PUESTOS = ['Sales Representative','Account Executive','Business De
 
 const DEMO = [
   {id:1,nombre:'Ana P.',    rol:'SDR',puesto:'Sales Representative', servicio:'Freight', tipoServicio:'Freight',
-   porcentajeMeta:210,hp:18,serviciosExtra:3,bellAward:2,bellLine:1,bellRecharge:0,elegible:1,awards:'double,bell',
-   fechaIngreso:'2024-01-15',foto:''},
+   porcentajeMeta:210,hp:18,serviciosExtra:3,bellLine:1,bellRecharge:0,elegible:1,awards:'double,bell',
+   fechaIngreso:'2024-01-15',foto:'',
+   fechaDoble:'2026-03-08',                          // fecha en que alcanzó 200%
+   bellEstado:'activo',                               // activo | completado-pendiente | completado-pagado
+   bellEscalonesAcum:0,                              // escalones históricos acumulados (para Dic 2026)
+   recargas:[]},                                     // [{fecha,monto,cliente,estado}]
   {id:2,nombre:'Carlos R.', rol:'MDR',puesto:'Market Developer',     servicio:'Parcel',  tipoServicio:'Parcel',
-   porcentajeMeta:165,hp:32,serviciosExtra:1,bellAward:1,bellLine:0,bellRecharge:1,elegible:1,awards:'record',
-   fechaIngreso:'2023-06-01',foto:''},
+   porcentajeMeta:165,hp:32,serviciosExtra:1,bellLine:0,bellRecharge:1,elegible:1,awards:'record',
+   fechaIngreso:'2023-06-01',foto:'',
+   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,
+   recargas:[{fecha:'2026-03-15',monto:150000,cliente:'Empresa ABC',estado:'pagada'}]},
   {id:3,nombre:'Laura M.',  rol:'SDR',puesto:'Sales Representative', servicio:'Air',     tipoServicio:'Air',
-   porcentajeMeta:145,hp:14,serviciosExtra:4,bellAward:1,bellLine:1,bellRecharge:0,elegible:1,awards:'cross',
-   fechaIngreso:'2024-03-10',foto:''},
+   porcentajeMeta:145,hp:14,serviciosExtra:4,bellLine:1,bellRecharge:0,elegible:1,awards:'cross',
+   fechaIngreso:'2024-03-10',foto:'',
+   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]},
   {id:4,nombre:'Jorge S.',  rol:'MDR',puesto:'Account Executive',    servicio:'Air',     tipoServicio:'Parcel',
-   porcentajeMeta:188,hp:28,serviciosExtra:2,bellAward:0,bellLine:0,bellRecharge:0,elegible:0,awards:'',
-   fechaIngreso:'2022-11-20',foto:''}
+   porcentajeMeta:188,hp:28,serviciosExtra:2,bellLine:0,bellRecharge:0,elegible:0,awards:'',
+   fechaIngreso:'2022-11-20',foto:'',
+   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]}
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -977,10 +1017,44 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const toNum = v => { const n=Number(v); return Number.isFinite(n)?n:0; };
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
 const awardsList = v => String(v||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
-const bellTotal  = r => toNum(r.bellAward)+toNum(r.bellLine)+toNum(r.bellRecharge)*3;
-const bellScore  = r => Math.min(bellTotal(r),3);
+// ─── Bell: calcula escalones automáticamente según reglas reales ──────────────
+// Manera 1: ganar Double, Récord o Cross = +1 escalón por award ganado (auto)
+// Manera 2: línea de negocio adicional = bellLine (manual)
+// Manera 3: recarga >$100k pagada = cada recarga pagada × 3 (automático desde recargas[])
+function bellEscalonesAuto(r){
+  // Awards ganados este mes → escalones automáticos
+  const doble   = doubleEligible(r) ? 1 : 0;
+  const record  = recordWinner(r) ? 1 : 0;
+  const cross   = crossWinner(r) ? 1 : 0;
+  const manera1 = Math.min(doble + record + cross, 3); // máx 3 combinados
+  // Línea adicional (manual, ingresado por admin)
+  const manera2 = clamp(toNum(r.bellLine), 0, 3);
+  // Recargas >$100k pagadas
+  const recargasPagadas = (r.recargas||[]).filter(rc=>rc.estado==='pagada' && toNum(rc.monto)>100000).length;
+  const manera3 = recargasPagadas * 3;
+  return Math.min(manera1 + manera2 + manera3, 3);
+}
+
+// bellTotal para display histórico (cuando se usa bellEscalonesAcum)
+const bellTotal  = r => bellEscalonesAuto(r);
+const bellScore  = r => Math.min(bellTotal(r), 3);
 const doubleEligible = r => r.elegible==1 && r.porcentajeMeta>=200;
 const rankClass  = i => i===0?'top':i===1?'second':i===2?'third':'';
+
+// FIX Cross: solo califica si serviciosExtra >= 2
+function crossWinner(r){
+  if(toNum(r.serviciosExtra) < 2) return false;
+  // Segmentado: verificar si es líder en su tipoServicio
+  const mismoTipo = rows.filter(x=>x.tipoServicio===r.tipoServicio && toNum(x.serviciosExtra)>=2);
+  if(!mismoTipo.length) return false;
+  const maxCross = Math.max(...mismoTipo.map(x=>toNum(x.serviciosExtra)));
+  return toNum(r.serviciosExtra) >= maxCross;
+}
+
+// FIX: score Cross solo aplica si serviciosExtra >= 2
+function crossScore(r){
+  return toNum(r.serviciosExtra) >= 2 ? toNum(r.serviciosExtra) : 0;
+}
 
 function iniciales(nombre){
   return String(nombre||'?').split(' ').map(p=>p[0]||'').join('').toUpperCase().slice(0,2);
@@ -1020,7 +1094,7 @@ function recordWinner(r){
 
 function score(r){
   return r.porcentajeMeta*weights.meta + r.hp*weights.hp
-       + r.serviciosExtra*weights.cross + bellScore(r)*weights.bell;
+       + crossScore(r)*weights.cross + bellScore(r)*weights.bell;
 }
 
 function badges(r){
@@ -1028,8 +1102,13 @@ function badges(r){
   if(doubleEligible(r))           out.push(['🥇 Double','b1']);
   else if(r.porcentajeMeta>=200)  out.push(['⚠️ Double (no elegible)','b5']);
   if(recordWinner(r))             out.push(['⚡ Récord','b2']);
-  if(r.serviciosExtra>=2)         out.push([`🔗 Cross (${esc(r.tipoServicio||'—')})`, 'b3']);
-  if(bellTotal(r)>=1)             out.push([`🔔 Bell ${Math.min(bellTotal(r),3)}/3`,'b4']);
+  // FIX: Cross solo si >=2 servicios y es líder en su tipo de servicio
+  if(crossWinner(r))              out.push([`🔗 Cross líder (${esc(r.tipoServicio||'—')})`, 'b3']);
+  else if(toNum(r.serviciosExtra)>=2) out.push([`🔗 Cross califica (${esc(r.tipoServicio||'—')})`, 'b3']);
+  const bt = bellTotal(r);
+  if(bt>=3 && r.bellEstado==='completado-pagado') out.push(['🔔 Bell ✅ Pagado','b4']);
+  else if(bt>=3 && r.bellEstado==='completado-pendiente') out.push(['🔔 Bell 🕐 Pendiente pago','b4']);
+  else if(bt>=1) out.push([`🔔 Bell ${bt}/3`,'b4']);
   return out;
 }
 
@@ -1069,33 +1148,52 @@ function avatarHtml(r, size=64){
 // LANE HTML
 // ═══════════════════════════════════════════════════════
 function laneHtml(r){
-  const raw  = r.porcentajeMeta/2.5 + bellTotal(r)*4;
-  const fill = Math.max(6,Math.min(94,raw));
-  const veh  = Math.max(6,Math.min(88,raw));
-  const checks=[18,40,62,84,96];
-  const icon = r.rol==='MDR'?'🚛 Truck':'📦 Packet';
-  const thr  = hpThresholdForRole(r.rol);
-  const hpPct= Math.min(100,Math.round(r.hp/thr*100));
-  const pMeta  = r.porcentajeMeta>=200?'ok':r.porcentajeMeta>=150?'':'warn';
-  const pCross = r.serviciosExtra>=2?'ok':'warn';
-  const pBell  = bellTotal(r)>=3?'ok':'';
+  // FIX: ruta de entregas basada en % de meta (para Double), no en fórmula mixta
+  const metaPct  = Math.min(r.porcentajeMeta, 200); // cap en 200% (=meta completa)
+  const fill     = Math.max(4, Math.min(94, metaPct / 2)); // 0-200% → 0-94% visual
+  const veh      = Math.max(4, Math.min(88, metaPct / 2));
+  const checks   = [25,50,75,100,94]; // 50%, 100%, 150%, 200%, 🔔
+  const checkLabels = ['50%','100%','150%','200%','🔔'];
+  const icon     = r.rol==='MDR'?'🚛 Truck':'📦 Packet';
+  const thr      = hpThresholdForRole(r.rol);
+  const hpPct    = Math.min(100, Math.round(r.hp/thr*100));
+  // Pills
+  const pMeta    = r.porcentajeMeta>=200?'ok':r.porcentajeMeta>=150?'':'warn';
+  const pCross   = toNum(r.serviciosExtra)>=2?'ok':'warn';
+  const bt       = bellTotal(r);
+  const pBell    = bt>=3?'ok':bt>=1?'':'';
+  // Bell estado
+  const bellEstadoHtml = bt>=3
+    ? r.bellEstado==='completado-pagado'
+      ? `<span style="font-size:10px;color:#c8f07a;font-weight:700">✅ Bono pagado</span>`
+      : `<span style="font-size:10px;color:#ffe566;font-weight:700">🕐 Bono pendiente de pago ($3,000)</span>`
+    : '';
+  // Cross segmento
+  const mismoTipo = rows.filter(x=>x.tipoServicio===r.tipoServicio && toNum(x.serviciosExtra)>=2);
+  const rankCross = mismoTipo.sort((a,b)=>b.serviciosExtra-a.serviciosExtra).findIndex(x=>x.id===r.id)+1;
+  const crossSegHtml = toNum(r.serviciosExtra)>=2
+    ? `<div style="font-size:10px;color:var(--muted);margin-bottom:3px">Cross rank en ${esc(r.tipoServicio||'—')}: <b style="color:${rankCross===1?'var(--green)':'var(--muted)'}">#${rankCross}</b></div>`
+    : '';
   return `<div class="lane">
-    <div class="laneHead"><span>Ruta de entregas</span><span>${Math.round(fill)}%</span></div>
+    <div class="laneHead"><span>Ruta al Double (% Meta)</span><span>${r.porcentajeMeta}%</span></div>
     <div class="roadWrap">
       <div class="road"></div><div class="roadLine"></div>
       <div class="roadFill" style="width:${fill}%"></div>
-      ${checks.map((c,i)=>`<div class="checkpoint" style="left:${c}%"><div class="dot">${i===checks.length-1?'🔔':'📦'}</div></div>`).join('')}
+      ${[25,50,75,88].map((c,i)=>`<div class="checkpoint" style="left:${c}%"><div class="dot" style="font-size:9px">${checkLabels[i]}</div></div>`).join('')}
+      <div class="checkpoint" style="left:93%"><div class="dot">🥇</div></div>
       <div class="vehicle" style="left:${veh}%">${icon}</div>
     </div>
     <div class="laneMeta">
       <div class="pill ${pMeta}">Meta ${esc(String(r.porcentajeMeta))}%</div>
       <div class="pill ${pCross}">Cross ${esc(String(r.serviciosExtra))}</div>
-      <div class="pill ${pBell}">Bell ${Math.min(bellTotal(r),3)}/3</div>
+      <div class="pill ${pBell}">Bell ${Math.min(bt,3)}/3</div>
     </div>
+    ${bellEstadoHtml?`<div style="margin-top:6px">${bellEstadoHtml}</div>`:''}
     <div style="margin-top:8px">
       <div style="font-size:10px;color:var(--muted);margin-bottom:3px">HP ${esc(String(r.hp))} / ${thr} para Récord</div>
       <div class="hpBar"><div class="hpFill" style="width:${hpPct}%;${r.hp>thr?'background:var(--green)':''}"></div></div>
     </div>
+    ${crossSegHtml}
   </div>`;
 }
 
@@ -1116,6 +1214,25 @@ function hpThresholdForRole(rol){
 function rowCardHtml(r,i,actions){
   const ant = antiguedadDias(r);
   const antStr = ant>365 ? `${Math.floor(ant/365)}a ${Math.floor((ant%365)/30)}m` : ant>30 ? `${Math.floor(ant/30)} meses` : `${ant} días`;
+  // Bell desglose automático
+  const doble_e  = doubleEligible(r) ? 1 : 0;
+  const record_e = recordWinner(r) ? 1 : 0;
+  const cross_e  = crossWinner(r) ? 1 : 0;
+  const manera1  = Math.min(doble_e+record_e+cross_e,3);
+  const manera2  = clamp(toNum(r.bellLine),0,3);
+  const recPag   = (r.recargas||[]).filter(rc=>rc.estado==='pagada'&&toNum(rc.monto)>100000).length;
+  const manera3  = recPag*3;
+  const bt       = Math.min(manera1+manera2+manera3,3);
+  // Bell estado badge
+  const bellEstBadge = bt>=3
+    ? r.bellEstado==='completado-pagado'
+      ? `<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:rgba(106,178,33,.12);border:1px solid rgba(106,178,33,.3);font-size:11px;color:#c8f07a;font-weight:700">✅ Bono $3,000 pagado</div>`
+      : `<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.3);font-size:11px;color:#ffe566;font-weight:700">🕐 Bono $3,000 pendiente de pago</div>`
+    : '';
+  // Primera llegada al Double
+  const doubleBadge = r.fechaDoble
+    ? `<div style="font-size:11px;color:#ffb088;margin-top:2px">🥇 Alcanzó 200% el ${formatFecha(r.fechaDoble)}</div>`
+    : '';
   return `<div class="row">
     <div class="rowGrid">
       <div class="rankAvatar">
@@ -1127,18 +1244,20 @@ function rowCardHtml(r,i,actions){
         <div class="personPuesto">${esc(r.puesto||r.rol)}</div>
         <div class="personMeta">${esc(r.rol)} · ${esc(r.servicio)}</div>
         ${r.fechaIngreso?`<div class="personDate">📅 Ingreso: ${formatFecha(r.fechaIngreso)} · ${esc(antStr)}</div>`:''}
+        ${doubleBadge}
         ${r.elegible==0?'<div style="font-size:11px;color:#ffb088;margin-top:4px">⚠️ No elegible Double</div>':''}
         ${laneHtml(r)}
         <div class="badges">${badges(r).map(b=>`<span class="badge ${b[1]}">${b[0]}</span>`).join('')||'<span class="badge">Sin insignias aún</span>'}</div>
         <div class="bellGrid">
-          <div class="bellBox"><div>🏆 Award</div><div class="bn">${esc(String(r.bellAward||0))}</div></div>
-          <div class="bellBox"><div>📈 Línea</div><div class="bn">${esc(String(r.bellLine||0))}</div></div>
-          <div class="bellBox"><div>💰 Recarga</div><div class="bn">${esc(String(r.bellRecharge||0))}×3</div></div>
+          <div class="bellBox"><div>🏆 Awards</div><div class="bn">${manera1}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">auto</div></div>
+          <div class="bellBox"><div>📈 Línea</div><div class="bn">${manera2}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">manual</div></div>
+          <div class="bellBox"><div>💰 Recarga</div><div class="bn">${recPag}<span style="font-size:11px">×3</span></div><div style="font-size:9px;color:var(--muted);margin-top:2px">${recPag} recarga${recPag!==1?'s':''} >&gt;$100k</div></div>
         </div>
+        ${bellEstBadge}
       </div>
       <div class="score">
         <div class="scoreBox"><div class="small">HP</div><div class="n">${esc(String(r.hp))}</div></div>
-        <div class="scoreBox"><div class="small">Cross</div><div class="n">${esc(String(r.serviciosExtra))}</div></div>
+        <div class="scoreBox"><div class="small">Cross</div><div class="n">${esc(String(r.serviciosExtra))}<span style="font-size:11px;color:var(--muted)">${toNum(r.serviciosExtra)<2?' (no cal.)':''}</span></div></div>
         <div class="scoreBox hl"><div class="small">Score</div><div class="n">${Math.round(score(r))}</div></div>
         ${actions}
       </div>
@@ -1236,11 +1355,13 @@ function parseCsv(text){
     servicio:(o.servicio||'General').trim(), tipoServicio:(o.tiposervicio||o.servicio||'General').trim(),
     porcentajeMeta:toNum(o.porcentajemeta||o['%meta']||0), hp:toNum(o.hp||0),
     serviciosExtra:toNum(o.serviciosextra||o.cross||0),
-    bellAward:clamp(toNum(o.bellaward||0),0,3),
     bellLine:clamp(toNum(o.bellline||0),0,3),
-    bellRecharge:clamp(toNum(o.bellrecharge||0),0,3),
     elegible:toNum(o.elegible??1), awards:(o.awards||'').trim(),
-    fechaIngreso:(o.fechaingreso||'').trim(), foto:''
+    fechaIngreso:(o.fechaingreso||'').trim(),
+    fechaDoble:(o.fechadoble||'').trim(),
+    bellEstado:(o.bellestado||'activo').trim(),
+    bellEscalonesAcum:toNum(o.bellescalonesacum||0),
+    recargas:[], foto:''
   }));
 }
 async function loadSheetData(silent=false){
@@ -1427,15 +1548,28 @@ function renderTop(list){
 // RENDER STATS
 // ═══════════════════════════════════════════════════════
 function renderStats(){
+  // Double: ordenar por fechaDoble para ver quién llegó primero
+  const dobles = rows.filter(r=>doubleEligible(r))
+    .sort((a,b)=>{
+      if(a.fechaDoble&&b.fechaDoble) return new Date(a.fechaDoble)-new Date(b.fechaDoble);
+      if(a.fechaDoble) return -1;
+      if(b.fechaDoble) return 1;
+      return 0;
+    });
+  const primerDouble = dobles[0];
+  const bellPendientes = rows.filter(r=>bellTotal(r)>=3&&r.bellEstado==='completado-pendiente').length;
   const cards=[
-    ['🥇 Double Award',  rows.filter(r=>doubleEligible(r)).length,   'Elegibles + 200% meta'],
-    ['⚡ Récord',         rows.filter(r=>recordWinner(r)).length,      'HP sobre umbral del rol'],
-    ['🔗 Cross-Service',  rows.filter(r=>r.serviciosExtra>=2).length,  '2+ servicios extra'],
-    ['🔔 Bell Completo',  rows.filter(r=>bellTotal(r)>=3).length,      '3 escalones completos']
+    ['🥇 Double Award',  dobles.length, primerDouble
+      ? `1° lugar: ${esc(primerDouble.nombre)}${primerDouble.fechaDoble?' · '+formatFecha(primerDouble.fechaDoble):''}`
+      : 'Sin ganadores aún'],
+    ['⚡ Récord',         rows.filter(r=>recordWinner(r)).length, 'HP sobre umbral del rol'],
+    ['🔗 Cross-Service',  rows.filter(r=>crossWinner(r)).length,  'Líder en su tipo de servicio'],
+    ['🔔 Bell Completo',  rows.filter(r=>bellTotal(r)>=3).length,
+      bellPendientes>0?`⚠️ ${bellPendientes} bono${bellPendientes>1?'s':''} pendiente${bellPendientes>1?'s':''} de pago`:'Todos los bonos al día']
   ];
   $('stats').innerHTML=cards.map(c=>`<div class="card stat">
     <div class="small">${c[0]}</div><div class="big">${c[1]}</div>
-    <div class="sub" style="margin-top:6px">${esc(c[2])}</div>
+    <div class="sub" style="margin-top:6px;font-size:11px">${c[2]}</div>
   </div>`).join('');
 }
 
@@ -1662,22 +1796,33 @@ function renderAdminColab(){
   if(!adminUnlocked) return;
   const list=filtered();
   if(!list.length){$('adminColabList').innerHTML='<div class="sub" style="padding:16px">Sin colaboradores.</div>';return;}
-  $('adminColabList').innerHTML=list.map((r,i)=>`
-    <div class="row" style="padding:12px">
+  $('adminColabList').innerHTML=list.map((r,i)=>{
+    const bt = bellTotal(r);
+    const bellBadge = bt>=3
+      ? r.bellEstado==='completado-pagado'
+        ? `<span style="font-size:10px;color:#c8f07a;font-weight:700">✅ Bono pagado</span>`
+        : `<span style="font-size:10px;color:#ffe566;font-weight:700;cursor:pointer" data-action="pagarbono" data-id="${r.id}">🕐 Marcar bono como pagado →</span>`
+      : bt>0 ? `<span style="font-size:10px;color:var(--muted)">🔔 ${bt}/3 escalones</span>` : '';
+    return `<div class="row" style="padding:12px">
       <div style="display:flex;align-items:center;gap:12px">
         ${avatarHtml(r,44)}
         <div style="flex:1;min-width:0">
           <div style="font-weight:900;font-size:15px">${esc(r.nombre)}</div>
           <div style="font-size:11px;color:var(--cyan);font-weight:700">${esc(r.puesto||r.rol)}</div>
           <div style="font-size:11px;color:var(--muted)">${esc(r.rol)} · ${esc(r.servicio)} ${r.fechaIngreso?'· '+formatFecha(r.fechaIngreso):''}</div>
-          <div style="font-size:12px;margin-top:4px">Meta <b>${esc(String(r.porcentajeMeta))}%</b> · HP <b>${esc(String(r.hp))}</b> · Cross <b>${esc(String(r.serviciosExtra))}</b></div>
+          <div style="font-size:12px;margin-top:4px">Meta <b>${esc(String(r.porcentajeMeta))}%</b> · HP <b>${esc(String(r.hp))}</b> · Cross <b>${esc(String(r.serviciosExtra))}</b>${toNum(r.serviciosExtra)<2?' <span style="color:#ffb088;font-size:10px">(no califica)</span>':''}</div>
+          <div style="margin-top:3px">${bellBadge}</div>
+          ${r.fechaDoble?`<div style="font-size:10px;color:#ffb088;margin-top:2px">🥇 Alcanzó 200%: ${formatFecha(r.fechaDoble)}</div>`:''}
+          ${(r.recargas||[]).filter(rc=>rc.estado==='pagada'&&toNum(rc.monto)>100000).length>0
+            ?`<div style="font-size:10px;color:#7dd8e8;margin-top:2px">💰 ${(r.recargas||[]).filter(rc=>rc.estado==='pagada'&&toNum(rc.monto)>100000).length} recarga(s) >$100k</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px">
           <button class="btn" data-action="edit" data-id="${r.id}" style="padding:7px 12px;font-size:12px">✏️</button>
           <button class="btn danger" data-action="remove" data-id="${r.id}" style="padding:7px 12px;font-size:12px">🗑</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1827,15 +1972,19 @@ function render(){
 function clearColabForm(){
   editingId=null;
   ['mNombre','mServicio','mAwards'].forEach(id=>{ if($(id)) $(id).value=''; });
-  ['mMeta','mHp','mCross','mBellAward','mBellLine','mBellRecharge'].forEach(id=>{ if($(id)) $(id).value='0'; });
-  if($('mElegible')) $('mElegible').value='1';
-  if($('mFechaIngreso')) $('mFechaIngreso').value='';
-  if($('mRol')) $('mRol').value='';
-  if($('mPuesto')) $('mPuesto').value='';
+  ['mMeta','mHp','mCross','mBellLine'].forEach(id=>{ if($(id)) $(id).value='0'; });
+  if($('mElegible'))    $('mElegible').value='1';
+  if($('mFechaIngreso'))$('mFechaIngreso').value='';
+  if($('mFechaDoble'))  $('mFechaDoble').value='';
+  if($('mBellEstado'))  $('mBellEstado').value='activo';
+  if($('mRol'))   $('mRol').value='';
+  if($('mPuesto'))$('mPuesto').value='';
+  _colabRecargas=[];
+  renderRecargasList();
   resetPhotoUpload();
-  if($('addBtn')) $('addBtn').textContent='+ Añadir colaborador';
+  if($('addBtn'))         $('addBtn').textContent='+ Añadir colaborador';
   if($('formColabTitle')) $('formColabTitle').textContent='Agregar colaborador';
-  if($('cancelEditBtn')) $('cancelEditBtn').classList.add('hidden');
+  if($('cancelEditBtn'))  $('cancelEditBtn').classList.add('hidden');
 }
 function fillColabForm(r){
   editingId=r.id;
@@ -1844,19 +1993,66 @@ function fillColabForm(r){
   if($('mPuesto'))      $('mPuesto').value=r.puesto||'';
   if($('mServicio'))    $('mServicio').value=r.servicio;
   if($('mFechaIngreso'))$('mFechaIngreso').value=r.fechaIngreso||'';
+  if($('mFechaDoble'))  $('mFechaDoble').value=r.fechaDoble||'';
   if($('mMeta'))        $('mMeta').value=r.porcentajeMeta;
   if($('mHp'))          $('mHp').value=r.hp;
   if($('mCross'))       $('mCross').value=r.serviciosExtra;
   if($('mElegible'))    $('mElegible').value=r.elegible;
-  if($('mBellAward'))   $('mBellAward').value=r.bellAward||0;
   if($('mBellLine'))    $('mBellLine').value=r.bellLine||0;
-  if($('mBellRecharge'))$('mBellRecharge').value=r.bellRecharge||0;
+  if($('mBellEstado'))  $('mBellEstado').value=r.bellEstado||'activo';
   if($('mAwards'))      $('mAwards').value=r.awards||'';
+  _colabRecargas = JSON.parse(JSON.stringify(r.recargas||[]));
+  renderRecargasList();
   setPhotoPreview(r.foto||'');
-  if($('addBtn')) $('addBtn').textContent='💾 Guardar cambios';
+  if($('addBtn'))         $('addBtn').textContent='💾 Guardar cambios';
   if($('formColabTitle')) $('formColabTitle').textContent='Editando colaborador';
-  if($('cancelEditBtn')) $('cancelEditBtn').classList.remove('hidden');
+  if($('cancelEditBtn'))  $('cancelEditBtn').classList.remove('hidden');
 }
+
+// ═══════════════════════════════════════════════════════
+// RECARGAS — lista temporal mientras se edita/agrega un colaborador
+// ═══════════════════════════════════════════════════════
+let _colabRecargas = [];
+
+function renderRecargasList(){
+  const cont = $('mRecargasList');
+  if(!cont) return;
+  if(!_colabRecargas.length){
+    cont.innerHTML='<div style="font-size:12px;color:var(--muted)">Sin recargas registradas.</div>';
+    return;
+  }
+  cont.innerHTML = _colabRecargas.map((rc,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:12px">
+      <div style="flex:1">
+        <b>${formatFecha(rc.fecha)}</b> · $${Number(rc.monto).toLocaleString('es-MX')} MXN · ${esc(rc.cliente)}
+      </div>
+      <select data-recidx="${i}" class="select" style="width:auto;padding:5px 8px;font-size:11px">
+        <option value="pagada" ${rc.estado==='pagada'?'selected':''}>✅ Pagada</option>
+        <option value="pendiente" ${rc.estado==='pendiente'?'selected':''}>🕐 Pendiente</option>
+      </select>
+      <button data-delrec="${i}" style="background:none;border:none;color:#ff8888;cursor:pointer;font-size:16px;line-height:1;padding:0 4px">×</button>
+    </div>`).join('');
+}
+
+if($('mRecargasList')) $('mRecargasList').addEventListener('change',e=>{
+  const idx = e.target.dataset.recidx;
+  if(idx!==undefined) _colabRecargas[parseInt(idx,10)].estado = e.target.value;
+});
+if($('mRecargasList')) $('mRecargasList').addEventListener('click',e=>{
+  const btn = e.target.closest('[data-delrec]');
+  if(!btn) return;
+  _colabRecargas.splice(parseInt(btn.dataset.delrec,10),1);
+  renderRecargasList();
+});
+if($('mRecAddBtn')) $('mRecAddBtn').onclick=()=>{
+  const fecha   = $('mRecFecha').value;
+  const monto   = toNum($('mRecMonto').value);
+  const cliente = ($('mRecCliente').value||'').trim();
+  if(!fecha||!monto||!cliente){setStatus('Completa fecha, monto y cliente de la recarga.','err');return;}
+  _colabRecargas.push({fecha,monto,cliente,estado:'pagada'});
+  $('mRecFecha').value=''; $('mRecMonto').value=''; $('mRecCliente').value='';
+  renderRecargasList();
+};
 
 // ═══════════════════════════════════════════════════════
 // EVENTO: AÑADIR / GUARDAR COLABORADOR
@@ -1870,15 +2066,23 @@ if($('addBtn')) $('addBtn').onclick=()=>{
     tipoServicio:($('mServicio').value||'General').trim(),
     porcentajeMeta:toNum($('mMeta').value), hp:toNum($('mHp').value),
     serviciosExtra:toNum($('mCross').value),
-    bellAward:clamp(toNum($('mBellAward').value),0,3),
     bellLine:clamp(toNum($('mBellLine').value),0,3),
-    bellRecharge:clamp(toNum($('mBellRecharge').value),0,3),
-    elegible:toNum($('mElegible').value), awards:($('mAwards').value||'').trim(),
-    fechaIngreso:$('mFechaIngreso').value||'', foto:_photoBase64
+    elegible:toNum($('mElegible').value),
+    awards:($('mAwards').value||'').trim(),
+    fechaIngreso:$('mFechaIngreso').value||'',
+    fechaDoble:$('mFechaDoble').value||'',
+    bellEstado:$('mBellEstado').value||'activo',
+    bellEscalonesAcum:0,
+    recargas:JSON.parse(JSON.stringify(_colabRecargas)),
+    foto:_photoBase64
   };
   if(editingId!==null){
     const idx=rows.findIndex(r=>r.id===editingId);
-    if(idx>=0) rows[idx]={...rows[idx],...data};
+    if(idx>=0){
+      // Preservar bellEscalonesAcum histórico
+      data.bellEscalonesAcum = rows[idx].bellEscalonesAcum||0;
+      rows[idx]={...rows[idx],...data};
+    }
     setStatus('Colaborador actualizado.','ok');
   }else{
     rows.push({id:Date.now(),...data});
@@ -1898,7 +2102,6 @@ if($('adminColabList')) $('adminColabList').addEventListener('click',e=>{
   if(action==='edit'){
     const r=rows.find(x=>x.id===id); if(!r) return;
     fillColabForm(r);
-    // Scroll al form
     $('atab-colaboradores').scrollIntoView({behavior:'smooth',block:'start'});
   }
   if(action==='remove'){
@@ -1906,6 +2109,18 @@ if($('adminColabList')) $('adminColabList').addEventListener('click',e=>{
     rows=rows.filter(r=>r.id!==id);
     if(editingId===id) clearColabForm();
     save(); render(); setStatus('Colaborador eliminado.');
+  }
+  if(action==='pagarbono'){
+    if(!confirm('¿Marcar el bono Bell de $3,000 como pagado? Esto actualizará el estado y acumulará los escalones históricos.')) return;
+    const idx=rows.findIndex(r=>r.id===id);
+    if(idx<0) return;
+    const r=rows[idx];
+    // Acumular escalones históricos para ranking de Diciembre
+    rows[idx]={...r,
+      bellEstado:'completado-pagado',
+      bellEscalonesAcum:(r.bellEscalonesAcum||0) + bellTotal(r)
+    };
+    save(); render(); setStatus(`Bono Bell de ${esc(r.nombre)} marcado como pagado ✅`,'ok');
   }
 });
 
