@@ -4,6 +4,236 @@
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Tendencys Commercial Excellence</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script type="module">
+// ═══════════════════════════════════════════════════════
+// FIREBASE — importaciones desde CDN (sin npm)
+// ═══════════════════════════════════════════════════════
+import { initializeApp }                          from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc,
+         collection, getDocs, addDoc, updateDoc,
+         deleteDoc, onSnapshot, writeBatch }       from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyAyzyJcSeSY6vmdx7qjq4WK7_upKmi1qgE",
+  authDomain:        "excellence-awards-85228.firebaseapp.com",
+  projectId:         "excellence-awards-85228",
+  storageBucket:     "excellence-awards-85228.firebasestorage.app",
+  messagingSenderId: "1036233857933",
+  appId:             "1:1036233857933:web:90f36513df13caf8027bc4"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db    = getFirestore(fbApp);
+
+// ─── Colecciones ───────────────────────────────────────
+// /config/main      → { roles, puestos, weights, sheetUrl, autoSync, syncSec, notifConfig }
+// /config/password  → { hash }
+// /colaboradores/   → documentos por id
+// /retos/           → documentos por id
+// /metas/           → documentos por id
+
+// ─── Helpers Firestore ────────────────────────────────
+async function fbGetDoc(path){
+  try{
+    const snap = await getDoc(doc(db, ...path.split('/')));
+    return snap.exists() ? snap.data() : null;
+  }catch(e){ console.warn('fbGetDoc',path,e); return null; }
+}
+async function fbSetDoc(path, data){
+  try{ await setDoc(doc(db, ...path.split('/')), data, {merge:true}); }
+  catch(e){ console.warn('fbSetDoc',path,e); }
+}
+async function fbGetCol(col){
+  try{
+    const snap = await getDocs(collection(db, col));
+    return snap.docs.map(d=>({...d.data(), _fbId:d.id}));
+  }catch(e){ console.warn('fbGetCol',col,e); return []; }
+}
+async function fbSaveDoc(colName, item){
+  // Usa item.id como docId para mantener referencia local
+  try{
+    const docId = String(item.id);
+    await setDoc(doc(db, colName, docId), item, {merge:false});
+  }catch(e){ console.warn('fbSaveDoc',colName,e); }
+}
+async function fbDeleteDoc(colName, itemId){
+  try{ await deleteDoc(doc(db, colName, String(itemId))); }
+  catch(e){ console.warn('fbDeleteDoc',colName,e); }
+}
+
+// ─── Suscripción en tiempo real ───────────────────────
+// Escucha cambios en Firestore y actualiza el UI automáticamente
+function fbListen(){
+  // Colaboradores
+  onSnapshot(collection(db,'colaboradores'), snap=>{
+    rows = snap.docs.map(d=>d.data());
+    _filteredCache = null;
+    render();
+    setFirebaseStatus('ok');
+  }, err=>{ console.warn('onSnapshot colaboradores',err); setFirebaseStatus('err'); });
+
+  // Retos
+  onSnapshot(collection(db,'retos'), snap=>{
+    retos = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+    renderRetoBox(); renderRetosAdmin(); triggerNotificaciones();
+  });
+
+  // Metas
+  onSnapshot(collection(db,'metas'), snap=>{
+    metasMensuales = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+    renderMetasBox(); renderMetasAdmin();
+  });
+
+  // Config
+  onSnapshot(doc(db,'config','main'), snap=>{
+    if(!snap.exists()) return;
+    const s = snap.data();
+    if(s.roles)    roles   = s.roles;
+    if(s.puestos)  puestos = s.puestos;
+    if(s.weights)  weights = {...weights,...s.weights};
+    if(s.notifConfig) notifConfig = {...notifConfig,...s.notifConfig};
+    render();
+  });
+}
+
+function setFirebaseStatus(type){
+  const dot  = document.querySelector('#statusBar .status-dot');
+  const text = document.getElementById('statusText');
+  const badge = document.getElementById('fbSyncBadge');
+  if(!dot||!text) return;
+  if(type==='ok'){
+    document.getElementById('statusBar').className='status ok';
+    text.textContent = '🔥 Firebase conectado — datos en la nube';
+    if(badge) badge.style.display='flex';
+  } else {
+    document.getElementById('statusBar').className='status err';
+    text.textContent = 'Firebase: error de conexión — usando datos locales';
+    if(badge) badge.style.display='none';
+  }
+}
+function setFirebaseLoading(){
+  const text = document.getElementById('statusText');
+  if(text) text.textContent = '🔥 Conectando a Firebase…';
+}
+
+// ─── EXPONER al scope global para que el código existente los use ─────
+window._fb = {
+  db, fbGetDoc, fbSetDoc, fbGetCol, fbSaveDoc, fbDeleteDoc,
+  async saveRows(){
+    const batch = writeBatch(db);
+    rows.forEach(r=>{ batch.set(doc(db,'colaboradores',String(r.id)), r); });
+    // Eliminar docs que ya no existen en rows
+    const snap = await getDocs(collection(db,'colaboradores'));
+    const ids  = new Set(rows.map(r=>String(r.id)));
+    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
+    await batch.commit();
+  },
+  async saveRetos(){
+    const batch = writeBatch(db);
+    retos.forEach(r=>{ batch.set(doc(db,'retos',String(r.id)), r); });
+    const snap = await getDocs(collection(db,'retos'));
+    const ids  = new Set(retos.map(r=>String(r.id)));
+    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
+    await batch.commit();
+  },
+  async saveMetas(){
+    const batch = writeBatch(db);
+    metasMensuales.forEach(m=>{ batch.set(doc(db,'metas',String(m.id)), m); });
+    const snap = await getDocs(collection(db,'metas'));
+    const ids  = new Set(metasMensuales.map(m=>String(m.id)));
+    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
+    await batch.commit();
+  },
+  async saveConfig(){
+    await fbSetDoc('config/main', {
+      roles, puestos, weights,
+      sheetUrl: document.getElementById('sheetUrl')?.value||'',
+      autoSync, syncSec: document.getElementById('syncSec')?.value||'60',
+      notifConfig
+    });
+  },
+  async savePassword(hash){
+    await fbSetDoc('config/password', { hash });
+  },
+  async getPassword(){
+    const d = await fbGetDoc('config/password');
+    return d ? d.hash : null;
+  },
+  async loadAll(){
+    setFirebaseLoading();
+    try{
+      // Carga inicial paralela
+      const [colabSnap, retosSnap, metasSnap, configSnap, passSnap] = await Promise.all([
+        getDocs(collection(db,'colaboradores')),
+        getDocs(collection(db,'retos')),
+        getDocs(collection(db,'metas')),
+        getDoc(doc(db,'config','main')),
+        getDoc(doc(db,'config','password'))
+      ]);
+      if(colabSnap.docs.length)  rows            = colabSnap.docs.map(d=>d.data());
+      if(retosSnap.docs.length)  retos           = retosSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+      if(metasSnap.docs.length)  metasMensuales  = metasSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+      if(configSnap.exists()){
+        const s = configSnap.data();
+        if(s.roles)       roles    = s.roles;
+        if(s.puestos)     puestos  = s.puestos;
+        if(s.weights)     weights  = {...weights,...s.weights};
+        if(s.notifConfig) notifConfig = {...notifConfig,...s.notifConfig};
+        if(s.sheetUrl && document.getElementById('sheetUrl'))  document.getElementById('sheetUrl').value = s.sheetUrl;
+        if(s.syncSec  && document.getElementById('syncSec'))   document.getElementById('syncSec').value  = s.syncSec;
+        if(typeof s.autoSync==='boolean') autoSync = s.autoSync;
+      }
+      if(passSnap.exists()) adminPasswordHash = passSnap.data().hash;
+      // Si no hay hash guardado en Firebase, usar el de localStorage como fallback
+      if(!adminPasswordHash){
+        adminPasswordHash = localStorage.getItem('tendencys-pass-v5');
+        if(!adminPasswordHash){
+          adminPasswordHash = await (async()=>{
+            const enc = new TextEncoder().encode('tendencys');
+            const buf = await crypto.subtle.digest('SHA-256',enc);
+            return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+          })();
+        }
+      }
+      // Si Firestore estaba vacío, migrar datos de localStorage
+      if(!colabSnap.docs.length){
+        const local = localStorage.getItem('tendencys-v5');
+        if(local){
+          try{
+            const parsed = JSON.parse(local);
+            if(parsed.rows?.length){
+              rows = parsed.rows;
+              await window._fb.saveRows();
+              console.log('Migración localStorage → Firebase completada');
+            }
+          }catch(e){}
+        }
+      }
+      setFirebaseStatus('ok');
+    }catch(e){
+      console.error('Firebase loadAll error:',e);
+      setFirebaseStatus('err');
+      // Fallback a localStorage si Firebase falla
+      const local = localStorage.getItem('tendencys-v5');
+      if(local){ try{ const s=JSON.parse(local); if(s.rows) rows=s.rows; }catch(e){} }
+    }
+  },
+  fbListen
+};
+
+// ─── ARRANQUE ─────────────────────────────────────────
+// Espera a que el DOM esté listo, luego carga Firebase y arranca la app
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await window._fb.loadAll();
+  window._fb.fbListen();    // suscripción en tiempo real
+  // loadNotifConfig usa localStorage para config de notif (no crítico para Firestore)
+  if(typeof loadNotifConfig==='function') loadNotifConfig();
+  if(typeof initPhotoUpload==='function') initPhotoUpload();
+  if(autoSync && typeof setAutoSync==='function') setAutoSync(true);
+  if(typeof render==='function') render();
+  setTimeout(()=>{ if(typeof triggerNotificaciones==='function') triggerNotificaciones(); }, 800);
+});
+</script>
 <style>
 :root{
   --orange:#e8451e; --blue:#1a6e9f; --cyan:#00afc0; --green:#6ab221;
@@ -198,6 +428,51 @@ h1{margin:14px 0 6px;font-size:38px;line-height:1;text-transform:uppercase}
 .adminSection{display:none}
 .adminSection.show{display:block}
 
+/* NOTIFICACIÓN BANNER */
+#notifBanner{
+  display:none;margin-bottom:18px;padding:14px 18px;border-radius:18px;
+  background:linear-gradient(135deg,rgba(232,69,30,.18),rgba(232,69,30,.08));
+  border:1px solid rgba(232,69,30,.5);
+  animation:notifPulse 2.5s ease-in-out infinite;
+}
+#notifBanner.show{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+#notifBanner.urgente{
+  background:linear-gradient(135deg,rgba(255,77,77,.22),rgba(232,69,30,.12));
+  border-color:rgba(255,77,77,.6);
+  animation:notifPulse .9s ease-in-out infinite;
+}
+.notifIcon{font-size:26px;flex-shrink:0}
+.notifBody{flex:1;min-width:0}
+.notifTitle{font-size:15px;font-weight:900;color:#fff}
+.notifSub{font-size:12px;color:#ffb088;margin-top:3px}
+.notifDias{padding:6px 14px;border-radius:999px;background:rgba(255,77,77,.2);border:1px solid rgba(255,77,77,.4);font-size:13px;font-weight:900;color:#ff9090;white-space:nowrap;flex-shrink:0}
+.notifClose{background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:20px;line-height:1;padding:0 4px;flex-shrink:0;transition:color .2s}
+.notifClose:hover{color:#fff}
+
+/* TOAST */
+#toastContainer{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.toast{
+  padding:14px 18px;border-radius:18px;min-width:280px;max-width:360px;
+  background:linear-gradient(135deg,#0f2538,#0c1f30);
+  border:1px solid rgba(232,69,30,.5);box-shadow:0 8px 32px rgba(0,0,0,.5);
+  display:flex;align-items:flex-start;gap:12px;pointer-events:all;
+  animation:toastIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.out{animation:toastOut .25s ease forwards}
+.toast-icon{font-size:22px;flex-shrink:0;margin-top:1px}
+.toast-body{flex:1;min-width:0}
+.toast-title{font-size:13px;font-weight:900;color:#fff}
+.toast-msg{font-size:12px;color:#ffb088;margin-top:3px;line-height:1.5}
+.toast-close{background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:17px;line-height:1;padding:0 2px;flex-shrink:0}
+.toast-close:hover{color:#fff}
+.toast-bar{height:3px;border-radius:999px;background:var(--orange);margin-top:10px;animation:toastBar linear forwards}
+
+@keyframes notifPulse{0%,100%{box-shadow:0 0 0 0 rgba(232,69,30,0)}50%{box-shadow:0 0 18px 4px rgba(232,69,30,.18)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px) scale(.94)}to{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes toastOut{to{opacity:0;transform:translateX(50px) scale(.9)}}
+@keyframes toastBar{from{width:100%}to{width:0}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
 /* MISC */
 .hidden{display:none!important}
 .sep{height:1px;background:var(--line);margin:14px 0}
@@ -212,7 +487,21 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
 </style>
 </head>
 <body>
+<!-- TOAST CONTAINER (fuera del wrap para posición fixed) -->
+<div id="toastContainer"></div>
+
 <div class="wrap">
+
+<!-- BANNER NOTIFICACIÓN RETO -->
+<div id="notifBanner">
+  <div class="notifIcon" id="notifIcon">⚡</div>
+  <div class="notifBody">
+    <div class="notifTitle" id="notifTitle">Reto por vencer</div>
+    <div class="notifSub" id="notifSub"></div>
+  </div>
+  <div class="notifDias" id="notifDias"></div>
+  <button class="notifClose" id="notifClose" title="Cerrar">×</button>
+</div>
 
 <!-- TABS -->
 <div class="tabs">
@@ -232,7 +521,14 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
   <div class="card">
     <div class="small">Top Performer</div>
     <div id="topPerformer"></div>
-    <div class="status" id="statusBar"><span class="status-dot"></span><span id="statusText">Usando datos demo.</span></div>
+    <div class="status" id="statusBar">
+      <span class="status-dot"></span>
+      <span id="statusText">Conectando a Firebase…</span>
+    </div>
+    <div id="fbSyncBadge" style="margin-top:8px;display:none;align-items:center;gap:6px;font-size:11px;color:var(--muted)">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite"></span>
+      Sincronización en tiempo real activa
+    </div>
   </div>
 </div>
 
@@ -516,7 +812,23 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
           </div>
         </div>
         <div class="info">
-          <div class="small">Pesos del Score</div>
+          <div class="small">Notificaciones de reto</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div>
+              <div class="small" style="margin-bottom:5px">Avisar con (días de anticipación)</div>
+              <input id="notifDiasConfig" class="input" type="number" min="1" max="30" value="7" placeholder="Ej. 7">
+            </div>
+            <div>
+              <div class="small" style="margin-bottom:5px">Mostrar como</div>
+              <select id="notifModo" class="select">
+                <option value="ambos">Banner + Toast</option>
+                <option value="banner">Solo banner</option>
+                <option value="toast">Solo toast</option>
+              </select>
+            </div>
+          </div>
+          <button id="saveNotifConfig" class="btn primary" style="margin-top:10px">💾 Guardar preferencias</button>
+        </div>
           <div class="weightGrid">
             <div class="weightBox"><label>% Meta ×</label><input id="wMeta"  type="number" value="0.5" step="0.1"></div>
             <div class="weightBox"><label>HP ×</label>    <input id="wHp"    type="number" value="3"   step="1"></div>
@@ -566,11 +878,13 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
       </div>
       <div class="rulePrize"><b>🎁 Premio</b>🏠 Medio día Off Office + 🎁 Gift card o 🌐 100 Envia Coins + Insignia</div>
     </div>
-    <div class="ruleCard r2">
+    <div class="ruleCard r2" id="rulesRecordCard">
       <div style="font-size:28px">⚡</div>
-      <div class="ruleTitle">Récord Award (Reto mensual)</div>
+      <div class="ruleTitle">Récord Award — <span id="rulesRetoMesLabel" style="color:var(--cyan)">cargando…</span></div>
       <div class="ruleBody" id="rulesRecordBody">Cargando reto activo…</div>
-      <div class="rulePrize" id="rulesRecordPrize"><b>🎁 Premio</b>🏠 1 día de Home Office + 🌐 100 Envia Coins</div>
+      <div class="rulePrize" id="rulesRecordPrize"><b>🎁 Premio</b> —</div>
+      <!-- historial compacto de retos pasados -->
+      <div id="rulesRetosHistorial" style="margin-top:14px"></div>
     </div>
     <div class="ruleCard r3">
       <div style="font-size:28px">🔗</div>
@@ -841,30 +1155,42 @@ function setStatus(msg,type=''){
 }
 
 // ═══════════════════════════════════════════════════════
-// PERSISTENCIA
+// PERSISTENCIA — Firebase (con fallback localStorage)
 // ═══════════════════════════════════════════════════════
-function save(){
+async function save(){
+  // Guardar también en localStorage como cache offline
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    rows,roles,puestos,retos,metasMensuales,
-    sheetUrl:$('sheetUrl')?$('sheetUrl').value:'',
-    autoSync, syncSec:$('syncSec')?$('syncSec').value:'60', weights
+    rows, roles, puestos, retos, metasMensuales, weights,
+    sheetUrl: $('sheetUrl')?$('sheetUrl').value:'',
+    autoSync, syncSec: $('syncSec')?$('syncSec').value:'60'
   }));
+  // Sincronizar con Firebase
+  if(window._fb){
+    try{
+      await window._fb.saveRows();
+      await window._fb.saveRetos();
+      await window._fb.saveMetas();
+      await window._fb.saveConfig();
+    }catch(e){ console.warn('Firebase save error:',e); }
+  }
 }
 
 function load(){
+  // load() ahora es solo fallback — Firebase carga en el módulo
+  // Se mantiene para compatibilidad en caso de fallo de red
   try{
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
     if(!s) return;
-    if(s.rows)          rows = s.rows;
-    if(s.roles)         roles = s.roles;
-    if(s.puestos)       puestos = s.puestos;
-    if(s.retos)         retos = s.retos;
+    if(s.rows)           rows           = s.rows;
+    if(s.roles)          roles          = s.roles;
+    if(s.puestos)        puestos        = s.puestos;
+    if(s.retos)          retos          = s.retos;
     if(s.metasMensuales) metasMensuales = s.metasMensuales;
     if(s.sheetUrl && $('sheetUrl'))  $('sheetUrl').value = s.sheetUrl;
     if(s.syncSec  && $('syncSec'))   $('syncSec').value  = s.syncSec;
     if(typeof s.autoSync==='boolean') autoSync = s.autoSync;
     if(s.weights) weights = {...weights,...s.weights};
-  }catch(e){console.warn(e);}
+  }catch(e){ console.warn(e); }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -878,10 +1204,15 @@ async function hashPassword(pass){
 async function verifyPassword(input,hash){
   return (await hashPassword(input))===hash;
 }
+// El hash se carga desde Firebase en el módulo — aquí solo como fallback inicial
 (async()=>{
   if(!adminPasswordHash){
-    adminPasswordHash = await hashPassword('tendencys');
-    localStorage.setItem(PASS_KEY, adminPasswordHash);
+    const stored = localStorage.getItem(PASS_KEY);
+    if(stored){ adminPasswordHash = stored; }
+    else{
+      adminPasswordHash = await hashPassword('tendencys');
+      localStorage.setItem(PASS_KEY, adminPasswordHash);
+    }
   }
 })();
 
@@ -1109,48 +1440,150 @@ function renderStats(){
 }
 
 // ═══════════════════════════════════════════════════════
-// RENDER RETO (panel tablero)
+// HELPERS RETO
+// ═══════════════════════════════════════════════════════
+function diasRestantes(fechaFin){
+  if(!fechaFin) return null;
+  const fin = new Date(fechaFin+'T23:59:59');
+  const diff = Math.ceil((fin - Date.now()) / 86400000);
+  return diff;
+}
+
+function contadorBadge(fechaFin){
+  const d = diasRestantes(fechaFin);
+  if(d === null) return '';
+  if(d < 0)  return `<span style="padding:4px 10px;border-radius:999px;background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.3);font-size:11px;color:#ffb8b8;font-weight:700">⛔ Terminó</span>`;
+  if(d === 0) return `<span style="padding:4px 10px;border-radius:999px;background:rgba(232,69,30,.18);border:1px solid rgba(232,69,30,.5);font-size:11px;color:#ffb088;font-weight:700;animation:pulse 1s infinite">🔥 ¡Hoy termina!</span>`;
+  if(d <= 3)  return `<span style="padding:4px 10px;border-radius:999px;background:rgba(232,69,30,.14);border:1px solid rgba(232,69,30,.4);font-size:11px;color:#ffb088;font-weight:700">⚡ ${d}d restantes</span>`;
+  if(d <= 7)  return `<span style="padding:4px 10px;border-radius:999px;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.3);font-size:11px;color:#ffe566;font-weight:700">⏳ ${d}d restantes</span>`;
+  return `<span style="padding:4px 10px;border-radius:999px;background:rgba(0,175,192,.1);border:1px solid rgba(0,175,192,.3);font-size:11px;color:#7dd8e8;font-weight:700">📅 ${d}d restantes</span>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER RETO — actualiza TODOS los puntos del sistema
 // ═══════════════════════════════════════════════════════
 function renderRetoBox(){
-  const reto=retoActivo();
-  if(!reto){$('recordBox').innerHTML='<div class="sub">Sin reto activo.</div>';return;}
-  const metasHtml=Object.entries(reto.metasPorRol||{})
-    .map(([rol,meta])=>`<div class="info" style="border-color:rgba(0,175,192,.2)"><div class="small">${esc(rol)}</div><div style="font-weight:900;margin-top:4px;color:var(--cyan)">${esc(meta)}</div></div>`)
-    .join('');
-  $('recordBox').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
-      <div>
-        <div class="big" style="font-size:18px;color:#fff2cb">${esc(reto.mes)}</div>
-        <div class="sub" style="margin-top:4px;font-size:13px">${esc(reto.descripcion)}</div>
-        ${reto.detalle?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(reto.detalle)}</div>`:''}
-      </div>
-      ${reto.fechaFin?`<div style="padding:5px 10px;border-radius:999px;background:rgba(232,69,30,.12);border:1px solid rgba(232,69,30,.3);font-size:11px;color:#ffb088;font-weight:700">📅 ${formatFecha(reto.fechaFin)}</div>`:''}
-    </div>
-    ${metasHtml?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-top:10px">${metasHtml}</div>`:''}
-    ${reto.premio?`<div style="margin-top:10px;padding:10px 12px;border-radius:14px;background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);font-size:12px;color:#ffe566">🎁 ${esc(reto.premio)}</div>`:''}`;
+  const reto = retoActivo();
 
-  // Actualizar Reglas
-  if($('rulesRecordBody')){
-    $('rulesRecordBody').innerHTML='';
-    const div=document.createElement('div');
-    div.textContent=`Reto de ${reto.mes}: ${reto.descripcion}`;
-    div.style.cssText='margin-bottom:8px';
-    $('rulesRecordBody').appendChild(div);
-    const ul=document.createElement('ul');
-    Object.entries(reto.metasPorRol||{}).forEach(([rol,meta])=>{
-      const li=document.createElement('li');li.textContent=`${rol} → ${meta}`;ul.appendChild(li);
-    });
-    if(ul.children.length) $('rulesRecordBody').appendChild(ul);
-    if(reto.fechaFin){
-      const d=document.createElement('div');d.textContent=`Fecha límite: ${formatFecha(reto.fechaFin)}`;
-      d.style.cssText='margin-top:6px;font-size:12px;color:var(--muted)';
-      $('rulesRecordBody').appendChild(d);
+  // ── 1. Panel lateral del Tablero ──────────────────────
+  const box = $('recordBox');
+  if(box){
+    if(!reto){ box.innerHTML='<div class="sub">Sin reto activo. Crea uno en Administrador → Retos.</div>'; }
+    else {
+      const metasHtml = Object.entries(reto.metasPorRol||{})
+        .map(([rol,meta])=>`<div class="info" style="border-color:rgba(0,175,192,.2);padding:10px 12px">
+          <div class="small">${esc(rol)}</div>
+          <div style="font-weight:900;margin-top:4px;color:var(--cyan);font-size:15px">${esc(meta)}</div>
+        </div>`).join('');
+      box.innerHTML=`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:900;color:#fff2cb;font-size:16px">${esc(reto.mes)}</div>
+            <div style="font-size:13px;color:var(--text);margin-top:4px;font-weight:700">${esc(reto.descripcion)}</div>
+            ${reto.detalle?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(reto.detalle)}</div>`:''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            ${contadorBadge(reto.fechaFin)}
+            ${reto.fechaFin?`<div style="font-size:10px;color:var(--muted);text-align:right">Cierra ${formatFecha(reto.fechaFin)}</div>`:''}
+          </div>
+        </div>
+        ${metasHtml?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:10px">${metasHtml}</div>`:''}
+        ${reto.premio?`<div style="margin-top:10px;padding:10px 12px;border-radius:14px;background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);font-size:12px;color:#ffe566">🎁 ${esc(reto.premio)}</div>`:''}`;
     }
   }
-  if($('rulesRecordPrize') && reto.premio){
-    $('rulesRecordPrize').innerHTML='<b>🎁 Premio</b>';
-    const sp=document.createElement('span');sp.textContent=reto.premio;
-    $('rulesRecordPrize').appendChild(sp);
+
+  // ── 2. Hero subtitle ──────────────────────────────────
+  const heroSub = $('heroSub');
+  if(heroSub && reto){
+    heroSub.innerHTML = `Reto activo: <b style="color:#fff">${esc(reto.descripcion)}</b> &nbsp;${contadorBadge(reto.fechaFin)}`;
+  }
+
+  // ── 3. TV subtitle ────────────────────────────────────
+  const tvSub = $('tvSub');
+  if(tvSub) tvSub.textContent = reto ? `${reto.mes} · ${reto.descripcion}` : 'Sin reto activo';
+
+  // ── 4. Pestaña Reglas — tarjeta dinámica ──────────────
+  const labelMes = $('rulesRetoMesLabel');
+  if(labelMes) labelMes.textContent = reto ? reto.mes : '—';
+
+  const bodyEl = $('rulesRecordBody');
+  if(bodyEl){
+    bodyEl.innerHTML = '';
+    if(!reto){
+      bodyEl.textContent = 'Sin reto activo este mes.';
+    } else {
+      // Descripción
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-weight:700;color:var(--text);margin-bottom:10px';
+      desc.textContent = reto.descripcion;
+      bodyEl.appendChild(desc);
+
+      // Detalle
+      if(reto.detalle){
+        const det = document.createElement('div');
+        det.style.cssText = 'margin-bottom:10px';
+        det.textContent = reto.detalle;
+        bodyEl.appendChild(det);
+      }
+
+      // Metas por rol
+      const entries = Object.entries(reto.metasPorRol||{});
+      if(entries.length){
+        const b = document.createElement('b'); b.textContent = 'Metas por rol:';
+        bodyEl.appendChild(b);
+        const ul = document.createElement('ul');
+        ul.style.cssText='padding-left:18px;margin:6px 0 10px';
+        entries.forEach(([rol,meta])=>{
+          const li = document.createElement('li');
+          li.textContent = `${rol} → ${meta}`;
+          ul.appendChild(li);
+        });
+        bodyEl.appendChild(ul);
+      }
+
+      // Contador + fechas
+      const fechaWrap = document.createElement('div');
+      fechaWrap.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px';
+      if(reto.fechaInicio){
+        const fi=document.createElement('span');
+        fi.style.cssText='font-size:11px;color:var(--muted)';
+        fi.textContent=`Inicia: ${formatFecha(reto.fechaInicio)}`;
+        fechaWrap.appendChild(fi);
+      }
+      if(reto.fechaFin){
+        const ff=document.createElement('span');
+        ff.style.cssText='font-size:11px;color:var(--muted)';
+        ff.textContent=`Cierra: ${formatFecha(reto.fechaFin)}`;
+        fechaWrap.appendChild(ff);
+        fechaWrap.insertAdjacentHTML('beforeend', contadorBadge(reto.fechaFin));
+      }
+      bodyEl.appendChild(fechaWrap);
+    }
+  }
+
+  // Premio en Reglas
+  const prizeEl = $('rulesRecordPrize');
+  if(prizeEl){
+    prizeEl.innerHTML='<b>🎁 Premio</b> ';
+    const sp=document.createElement('span');
+    sp.textContent = reto&&reto.premio ? reto.premio : 'Definido por líderes comerciales';
+    prizeEl.appendChild(sp);
+  }
+
+  // ── 5. Historial compacto de retos en Reglas ──────────
+  const histEl = $('rulesRetosHistorial');
+  if(histEl){
+    const pasados = retos.filter(r=>r.estado==='pasado').slice(-4).reverse();
+    if(!pasados.length){ histEl.innerHTML=''; return; }
+    histEl.innerHTML=`
+      <div style="margin-top:4px;padding-top:12px;border-top:1px solid var(--line)">
+        <div class="small" style="margin-bottom:8px">Retos anteriores</div>
+        ${pasados.map(re=>`
+          <div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12px">
+            <div style="font-weight:700;color:var(--muted)">${esc(re.mes)}</div>
+            <div style="color:var(--muted);margin-top:2px">${esc(re.descripcion)}</div>
+          </div>`).join('')}
+      </div>`;
   }
 }
 
@@ -1342,19 +1775,25 @@ function renderRetosAdmin(){
 // ═══════════════════════════════════════════════════════
 function renderTv(){
   const reto=retoActivo();
-  $('tvSub').textContent=reto?`${reto.mes} · ${reto.descripcion}`:'';
+  // tvSub se actualiza en renderRetoBox()
   const n=new Date();
   $('tvClock').textContent=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const all=[...rows].sort((a,b)=>score(b)-score(a));
   $('tvRows').innerHTML=all.map((r,i)=>rowCardHtml(r,i,'')).join('');
 }
 
-// Reloj TV
+// Reloj TV + refresco contador de días cada minuto
 setInterval(()=>{
-  if(activeTab!=='tv') return;
-  const n=new Date();
-  if($('tvClock')) $('tvClock').textContent=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(activeTab==='tv'){
+    const n=new Date();
+    if($('tvClock')) $('tvClock').textContent=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
 },1000);
+// Refresca contadores de días cada minuto (sin rebuild completo)
+setInterval(()=>{
+  renderRetoBox();
+  triggerNotificaciones();
+},60000);
 
 // ═══════════════════════════════════════════════════════
 // RENDER PRINCIPAL
@@ -1665,8 +2104,10 @@ if($('savePass')) $('savePass').onclick=async()=>{
   if(!v){setStatus('Escribe una contraseña.','err');return;}
   if(v.length<6){setStatus('Mínimo 6 caracteres.','err');return;}
   adminPasswordHash=await hashPassword(v);
+  // Guardar en localStorage Y Firebase
   localStorage.setItem(PASS_KEY,adminPasswordHash);
-  $('newPass').value=''; setStatus('Contraseña actualizada.','ok');
+  if(window._fb) await window._fb.savePassword(adminPasswordHash);
+  $('newPass').value=''; setStatus('Contraseña actualizada y sincronizada.','ok');
 };
 
 let _weightsDebounce;
@@ -1680,12 +2121,158 @@ let _weightsDebounce;
 });
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// SISTEMA DE NOTIFICACIONES
 // ═══════════════════════════════════════════════════════
-load();
-initPhotoUpload();
-if(autoSync) setAutoSync(true);
-render();
+let notifConfig = { dias: 7, modo: 'ambos' };
+let _bannerDismissedForId = null; // evita re-mostrar si el usuario cerró el banner
+let _toastShownIds = new Set();   // evita repetir toasts en la misma sesión
+
+function loadNotifConfig(){
+  try{
+    const s = JSON.parse(localStorage.getItem('tendencys-notif')||'null');
+    if(s){ notifConfig = {...notifConfig,...s}; }
+  }catch(e){}
+  if($('notifDiasConfig')) $('notifDiasConfig').value = notifConfig.dias;
+  if($('notifModo'))       $('notifModo').value       = notifConfig.modo;
+}
+function saveNotifConfig(){
+  notifConfig.dias = Math.max(1, toNum($('notifDiasConfig').value)||7);
+  notifConfig.modo = $('notifModo').value || 'ambos';
+  localStorage.setItem('tendencys-notif', JSON.stringify(notifConfig));
+}
+
+// ── Banner persistente ─────────────────────────────────
+function renderNotifBanner(){
+  const reto = retoActivo();
+  const banner = $('notifBanner');
+  if(!banner) return;
+
+  if(!reto || !reto.fechaFin){
+    banner.classList.remove('show');
+    return;
+  }
+
+  const d = diasRestantes(reto.fechaFin);
+  if(d === null || d > notifConfig.dias || d < 0){
+    banner.classList.remove('show');
+    return;
+  }
+
+  // Si el usuario cerró el banner para este reto, no volver a mostrar
+  if(_bannerDismissedForId === reto.id){
+    banner.classList.remove('show');
+    return;
+  }
+
+  const urgente = d <= 1;
+  banner.className = urgente ? 'show urgente' : 'show';
+
+  $('notifIcon').textContent  = d === 0 ? '🔥' : d <= 3 ? '🚨' : '⚡';
+  $('notifTitle').textContent = d === 0
+    ? `¡El reto vence HOY!`
+    : d === 1
+    ? `¡Mañana cierra el reto!`
+    : `El reto está por vencer`;
+
+  $('notifSub').textContent   = `${reto.mes} · ${reto.descripcion}`;
+  $('notifDias').textContent  = d === 0 ? '¡Hoy!' : d === 1 ? '1 día' : `${d} días`;
+}
+
+// Botón cerrar banner
+if($('notifClose')){
+  $('notifClose').onclick = ()=>{
+    const reto = retoActivo();
+    if(reto) _bannerDismissedForId = reto.id;
+    $('notifBanner').classList.remove('show');
+  };
+}
+
+// ── Toast flotante ─────────────────────────────────────
+let _toastQueue = [];
+let _toastRunning = false;
+
+function showToast({ icon='⚡', title='', msg='', duracion=6000 }){
+  _toastQueue.push({icon, title, msg, duracion});
+  if(!_toastRunning) processToastQueue();
+}
+
+function processToastQueue(){
+  if(!_toastQueue.length){ _toastRunning=false; return; }
+  _toastRunning = true;
+  const { icon, title, msg, duracion } = _toastQueue.shift();
+  const container = $('toastContainer');
+  if(!container){ _toastRunning=false; return; }
+
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <div class="toast-icon">${icon}</div>
+    <div class="toast-body">
+      <div class="toast-title">${esc(title)}</div>
+      <div class="toast-msg">${esc(msg)}</div>
+      <div class="toast-bar" style="animation-duration:${duracion}ms"></div>
+    </div>
+    <button class="toast-close" title="Cerrar">×</button>`;
+
+  container.appendChild(toast);
+
+  const close = ()=>{
+    toast.classList.add('out');
+    setTimeout(()=>{ toast.remove(); setTimeout(processToastQueue, 200); }, 260);
+  };
+  toast.querySelector('.toast-close').onclick = close;
+  const autoClose = setTimeout(close, duracion);
+  toast.querySelector('.toast-close').addEventListener('click',()=>clearTimeout(autoClose),{once:true});
+}
+
+function checkAndFireToast(){
+  const reto = retoActivo();
+  if(!reto || !reto.fechaFin) return;
+  const d = diasRestantes(reto.fechaFin);
+  if(d === null || d > notifConfig.dias || d < 0) return;
+  if(_toastShownIds.has(reto.id + '_' + d)) return; // ya mostrado hoy para este reto+días
+
+  _toastShownIds.add(reto.id + '_' + d);
+
+  const icon  = d===0?'🔥':d<=3?'🚨':'⚡';
+  const title = d===0?'¡El reto cierra HOY!':d===1?'¡Mañana vence el reto!':'Reto por vencer';
+  const msg   = `${reto.mes} · ${reto.descripcion}${reto.premio?' · 🎁 '+reto.premio:''}`;
+
+  if(notifConfig.modo==='toast'||notifConfig.modo==='ambos'){
+    showToast({ icon, title, msg, duracion: d<=1 ? 9000 : 6000 });
+  }
+}
+
+// ── Función central que dispara banner + toast según config ──
+function triggerNotificaciones(){
+  if(notifConfig.modo==='toast'||notifConfig.modo==='ambos') checkAndFireToast();
+  if(notifConfig.modo==='banner'||notifConfig.modo==='ambos') renderNotifBanner();
+}
+
+// Guardar config notif
+if($('saveNotifConfig')) $('saveNotifConfig').onclick = ()=>{
+  saveNotifConfig();
+  // Reset estado para que las notificaciones se re-evalúen con nueva config
+  _bannerDismissedForId = null;
+  _toastShownIds.clear();
+  triggerNotificaciones();
+  setStatus('Preferencias de notificación guardadas.','ok');
+};
+
+// ═══════════════════════════════════════════════════════
+// INIT — Firebase carga los datos en el módulo <script type="module">
+// Este bloque solo corre si Firebase NO está disponible (fallback)
+// ═══════════════════════════════════════════════════════
+if(!window._fb){
+  // Fallback sin Firebase
+  load();
+  loadNotifConfig();
+  initPhotoUpload();
+  if(autoSync) setAutoSync(true);
+  render();
+  setTimeout(triggerNotificaciones, 800);
+}
+// Si Firebase SÍ está — el arranque lo maneja el módulo en DOMContentLoaded
 </script>
 </body>
 </html>
