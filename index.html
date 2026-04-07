@@ -3,17 +3,15 @@
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Tendencys Commercial Excellence</title>
+<!-- Firebase SDK (compat — funciona como script global, sin módulos) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script type="module">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
 // ═══════════════════════════════════════════════════════
-// FIREBASE — importaciones desde CDN (sin npm)
+// FIREBASE INIT — compat SDK (scope global, sin import/export)
 // ═══════════════════════════════════════════════════════
-import { initializeApp }                          from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc,
-         collection, getDocs, addDoc, updateDoc,
-         deleteDoc, onSnapshot, writeBatch }       from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-
-const firebaseConfig = {
+const _firebaseConfig = {
   apiKey:            "AIzaSyAyzyJcSeSY6vmdx7qjq4WK7_upKmi1qgE",
   authDomain:        "excellence-awards-85228.firebaseapp.com",
   projectId:         "excellence-awards-85228",
@@ -22,159 +20,68 @@ const firebaseConfig = {
   appId:             "1:1036233857933:web:90f36513df13caf8027bc4"
 };
 
-const fbApp = initializeApp(firebaseConfig);
-const db    = getFirestore(fbApp);
+let _db = null;
+try {
+  if (!firebase.apps.length) firebase.initializeApp(_firebaseConfig);
+  _db = firebase.firestore();
+} catch(e) { console.warn('Firebase init error:', e); }
 
-// ─── Colecciones ───────────────────────────────────────
-// /config/main      → { roles, puestos, weights, sheetUrl, autoSync, syncSec, notifConfig }
-// /config/password  → { hash }
-// /colaboradores/   → documentos por id
-// /retos/           → documentos por id
-// /metas/           → documentos por id
+// ─── Helpers ──────────────────────────────────────────
+const FB = {
+  ok: () => !!_db,
 
-// ─── Helpers Firestore ────────────────────────────────
-async function fbGetDoc(path){
-  try{
-    const snap = await getDoc(doc(db, ...path.split('/')));
-    return snap.exists() ? snap.data() : null;
-  }catch(e){ console.warn('fbGetDoc',path,e); return null; }
-}
-async function fbSetDoc(path, data){
-  try{ await setDoc(doc(db, ...path.split('/')), data, {merge:true}); }
-  catch(e){ console.warn('fbSetDoc',path,e); }
-}
-async function fbGetCol(col){
-  try{
-    const snap = await getDocs(collection(db, col));
-    return snap.docs.map(d=>({...d.data(), _fbId:d.id}));
-  }catch(e){ console.warn('fbGetCol',col,e); return []; }
-}
-async function fbSaveDoc(colName, item){
-  // Usa item.id como docId para mantener referencia local
-  try{
-    const docId = String(item.id);
-    await setDoc(doc(db, colName, docId), item, {merge:false});
-  }catch(e){ console.warn('fbSaveDoc',colName,e); }
-}
-async function fbDeleteDoc(colName, itemId){
-  try{ await deleteDoc(doc(db, colName, String(itemId))); }
-  catch(e){ console.warn('fbDeleteDoc',colName,e); }
-}
-
-// ─── Suscripción en tiempo real ───────────────────────
-// Escucha cambios en Firestore y actualiza el UI automáticamente
-function fbListen(){
-  // Colaboradores
-  onSnapshot(collection(db,'colaboradores'), snap=>{
-    rows = snap.docs.map(d=>d.data());
-    _filteredCache = null;
-    render();
-    setFirebaseStatus('ok');
-  }, err=>{ console.warn('onSnapshot colaboradores',err); setFirebaseStatus('err'); });
-
-  // Retos
-  onSnapshot(collection(db,'retos'), snap=>{
-    retos = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
-    renderRetoBox(); renderRetosAdmin(); triggerNotificaciones();
-  });
-
-  // Metas
-  onSnapshot(collection(db,'metas'), snap=>{
-    metasMensuales = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
-    renderMetasBox(); renderMetasAdmin();
-  });
-
-  // Config
-  onSnapshot(doc(db,'config','main'), snap=>{
-    if(!snap.exists()) return;
-    const s = snap.data();
-    if(s.roles)    roles   = s.roles;
-    if(s.puestos)  puestos = s.puestos;
-    if(s.weights)  weights = {...weights,...s.weights};
-    if(s.notifConfig) notifConfig = {...notifConfig,...s.notifConfig};
-    render();
-  });
-}
-
-function setFirebaseStatus(type){
-  const dot  = document.querySelector('#statusBar .status-dot');
-  const text = document.getElementById('statusText');
-  const badge = document.getElementById('fbSyncBadge');
-  if(!dot||!text) return;
-  if(type==='ok'){
-    document.getElementById('statusBar').className='status ok';
-    text.textContent = '🔥 Firebase conectado — datos en la nube';
-    if(badge) badge.style.display='flex';
-  } else {
-    document.getElementById('statusBar').className='status err';
-    text.textContent = 'Firebase: error de conexión — usando datos locales';
-    if(badge) badge.style.display='none';
-  }
-}
-function setFirebaseLoading(){
-  const text = document.getElementById('statusText');
-  if(text) text.textContent = '🔥 Conectando a Firebase…';
-}
-
-// ─── EXPONER al scope global para que el código existente los use ─────
-window._fb = {
-  db, fbGetDoc, fbSetDoc, fbGetCol, fbSaveDoc, fbDeleteDoc,
-  async saveRows(){
-    const batch = writeBatch(db);
-    rows.forEach(r=>{ batch.set(doc(db,'colaboradores',String(r.id)), r); });
-    // Eliminar docs que ya no existen en rows
-    const snap = await getDocs(collection(db,'colaboradores'));
-    const ids  = new Set(rows.map(r=>String(r.id)));
-    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
-    await batch.commit();
-  },
-  async saveRetos(){
-    const batch = writeBatch(db);
-    retos.forEach(r=>{ batch.set(doc(db,'retos',String(r.id)), r); });
-    const snap = await getDocs(collection(db,'retos'));
-    const ids  = new Set(retos.map(r=>String(r.id)));
-    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
-    await batch.commit();
-  },
-  async saveMetas(){
-    const batch = writeBatch(db);
-    metasMensuales.forEach(m=>{ batch.set(doc(db,'metas',String(m.id)), m); });
-    const snap = await getDocs(collection(db,'metas'));
-    const ids  = new Set(metasMensuales.map(m=>String(m.id)));
-    snap.docs.forEach(d=>{ if(!ids.has(d.id)) batch.delete(d.ref); });
-    await batch.commit();
-  },
-  async saveConfig(){
-    await fbSetDoc('config/main', {
-      roles, puestos, weights,
-      sheetUrl: document.getElementById('sheetUrl')?.value||'',
-      autoSync, syncSec: document.getElementById('syncSec')?.value||'60',
-      notifConfig
-    });
-  },
-  async savePassword(hash){
-    await fbSetDoc('config/password', { hash });
-  },
-  async getPassword(){
-    const d = await fbGetDoc('config/password');
-    return d ? d.hash : null;
-  },
-  async loadAll(){
-    setFirebaseLoading();
+  async saveCol(colName, arr){
+    if(!_db) return;
     try{
-      // Carga inicial paralela
-      const [colabSnap, retosSnap, metasSnap, configSnap, passSnap] = await Promise.all([
-        getDocs(collection(db,'colaboradores')),
-        getDocs(collection(db,'retos')),
-        getDocs(collection(db,'metas')),
-        getDoc(doc(db,'config','main')),
-        getDoc(doc(db,'config','password'))
+      const batch = _db.batch();
+      arr.forEach(item => {
+        const ref = _db.collection(colName).doc(String(item.id));
+        batch.set(ref, item);
+      });
+      // Borrar documentos que ya no existen
+      const snap = await _db.collection(colName).get();
+      const ids  = new Set(arr.map(x => String(x.id)));
+      snap.docs.forEach(d => { if(!ids.has(d.id)) batch.delete(d.ref); });
+      await batch.commit();
+    } catch(e){ console.warn(`FB.saveCol(${colName})`, e); }
+  },
+
+  async saveDoc(path, data){
+    if(!_db) return;
+    try{
+      const parts = path.split('/');
+      await _db.collection(parts[0]).doc(parts[1]).set(data, {merge:true});
+    } catch(e){ console.warn(`FB.saveDoc(${path})`, e); }
+  },
+
+  async loadAll(){
+    if(!_db) return false;
+    try{
+      fbSetStatus('loading');
+      const [colabSnap, retosSnap, metasSnap, cfgSnap, passSnap] = await Promise.all([
+        _db.collection('colaboradores').get(),
+        _db.collection('retos').get(),
+        _db.collection('metas').get(),
+        _db.collection('config').doc('main').get(),
+        _db.collection('config').doc('password').get()
       ]);
-      if(colabSnap.docs.length)  rows            = colabSnap.docs.map(d=>d.data());
-      if(retosSnap.docs.length)  retos           = retosSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
-      if(metasSnap.docs.length)  metasMensuales  = metasSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
-      if(configSnap.exists()){
-        const s = configSnap.data();
+
+      if(colabSnap.docs.length)
+        rows = colabSnap.docs.map(d => d.data());
+      else {
+        // Firestore vacío → migrar desde localStorage
+        const local = localStorage.getItem('tendencys-v5');
+        if(local){ try{ const p=JSON.parse(local); if(p.rows?.length){ rows=p.rows; await FB.saveCol('colaboradores',rows); } }catch(e){} }
+      }
+
+      if(retosSnap.docs.length)
+        retos = retosSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+
+      if(metasSnap.docs.length)
+        metasMensuales = metasSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+
+      if(cfgSnap.exists()){
+        const s = cfgSnap.data();
         if(s.roles)       roles    = s.roles;
         if(s.puestos)     puestos  = s.puestos;
         if(s.weights)     weights  = {...weights,...s.weights};
@@ -183,57 +90,89 @@ window._fb = {
         if(s.syncSec  && document.getElementById('syncSec'))   document.getElementById('syncSec').value  = s.syncSec;
         if(typeof s.autoSync==='boolean') autoSync = s.autoSync;
       }
+
       if(passSnap.exists()) adminPasswordHash = passSnap.data().hash;
-      // Si no hay hash guardado en Firebase, usar el de localStorage como fallback
       if(!adminPasswordHash){
         adminPasswordHash = localStorage.getItem('tendencys-pass-v5');
         if(!adminPasswordHash){
-          adminPasswordHash = await (async()=>{
-            const enc = new TextEncoder().encode('tendencys');
-            const buf = await crypto.subtle.digest('SHA-256',enc);
-            return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-          })();
+          const enc = new TextEncoder().encode('tendencys');
+          const buf = await crypto.subtle.digest('SHA-256', enc);
+          adminPasswordHash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
         }
       }
-      // Si Firestore estaba vacío, migrar datos de localStorage
-      if(!colabSnap.docs.length){
-        const local = localStorage.getItem('tendencys-v5');
-        if(local){
-          try{
-            const parsed = JSON.parse(local);
-            if(parsed.rows?.length){
-              rows = parsed.rows;
-              await window._fb.saveRows();
-              console.log('Migración localStorage → Firebase completada');
-            }
-          }catch(e){}
-        }
-      }
-      setFirebaseStatus('ok');
-    }catch(e){
-      console.error('Firebase loadAll error:',e);
-      setFirebaseStatus('err');
-      // Fallback a localStorage si Firebase falla
-      const local = localStorage.getItem('tendencys-v5');
-      if(local){ try{ const s=JSON.parse(local); if(s.rows) rows=s.rows; }catch(e){} }
+
+      fbSetStatus('ok');
+      return true;
+    } catch(e){
+      console.error('FB.loadAll error:', e);
+      fbSetStatus('err');
+      // Fallback localStorage
+      try{ const s=JSON.parse(localStorage.getItem('tendencys-v5')||'null'); if(s?.rows) rows=s.rows; }catch(ex){}
+      return false;
     }
   },
-  fbListen
+
+  listen(){
+    if(!_db) return;
+    // Colaboradores — tiempo real
+    _db.collection('colaboradores').onSnapshot(snap=>{
+      rows = snap.docs.map(d=>d.data());
+      _filteredCache = null;
+      render();
+      fbSetStatus('ok');
+    }, err=>{ console.warn('onSnapshot colaboradores',err); fbSetStatus('err'); });
+
+    // Retos
+    _db.collection('retos').onSnapshot(snap=>{
+      retos = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+      if(typeof renderRetoBox==='function') renderRetoBox();
+      if(typeof renderRetosAdmin==='function') renderRetosAdmin();
+      if(typeof triggerNotificaciones==='function') triggerNotificaciones();
+    });
+
+    // Metas
+    _db.collection('metas').onSnapshot(snap=>{
+      metasMensuales = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
+      if(typeof renderMetasBox==='function') renderMetasBox();
+      if(typeof renderMetasAdmin==='function') renderMetasAdmin();
+    });
+
+    // Config
+    _db.collection('config').doc('main').onSnapshot(snap=>{
+      if(!snap.exists) return;
+      const s = snap.data();
+      if(s.roles)    roles   = s.roles;
+      if(s.puestos)  puestos = s.puestos;
+      if(s.weights)  weights = {...weights,...s.weights};
+      if(typeof render==='function') render();
+    });
+  }
 };
 
-// ─── ARRANQUE ─────────────────────────────────────────
-// Espera a que el DOM esté listo, luego carga Firebase y arranca la app
-document.addEventListener('DOMContentLoaded', async ()=>{
-  await window._fb.loadAll();
-  window._fb.fbListen();    // suscripción en tiempo real
-  // loadNotifConfig usa localStorage para config de notif (no crítico para Firestore)
-  if(typeof loadNotifConfig==='function') loadNotifConfig();
-  if(typeof initPhotoUpload==='function') initPhotoUpload();
-  if(autoSync && typeof setAutoSync==='function') setAutoSync(true);
-  if(typeof render==='function') render();
-  setTimeout(()=>{ if(typeof triggerNotificaciones==='function') triggerNotificaciones(); }, 800);
-});
+function fbSetStatus(type){
+  const bar   = document.getElementById('statusBar');
+  const text  = document.getElementById('statusText');
+  const badge = document.getElementById('fbSyncBadge');
+  if(!text) return;
+  if(type==='ok'){
+    if(bar)   bar.className = 'status ok';
+    text.textContent = '🔥 Firebase conectado — sincronización en tiempo real';
+    if(badge) badge.style.display = 'flex';
+  } else if(type==='loading'){
+    if(bar)   bar.className = 'status';
+    text.textContent = '🔥 Conectando a Firebase…';
+    if(badge) badge.style.display = 'none';
+  } else {
+    if(bar)   bar.className = 'status err';
+    text.textContent = '⚠️ Firebase sin conexión — usando datos locales';
+    if(badge) badge.style.display = 'none';
+  }
+}
+
+// Exponer para uso desde save()
+window._FB = FB;
 </script>
+
 <style>
 :root{
   --orange:#e8451e; --blue:#1a6e9f; --cyan:#00afc0; --green:#6ab221;
@@ -1274,22 +1213,27 @@ function setStatus(msg,type=''){
 }
 
 // ═══════════════════════════════════════════════════════
-// PERSISTENCIA — Firebase (con fallback localStorage)
+// PERSISTENCIA — Firebase + localStorage fallback
 // ═══════════════════════════════════════════════════════
 async function save(){
-  // Guardar también en localStorage como cache offline
+  // Siempre guardar en localStorage como cache offline
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     rows, roles, puestos, retos, metasMensuales, weights,
     sheetUrl: $('sheetUrl')?$('sheetUrl').value:'',
     autoSync, syncSec: $('syncSec')?$('syncSec').value:'60'
   }));
-  // Sincronizar con Firebase
-  if(window._fb){
+  // Sincronizar con Firebase si está disponible
+  if(window._FB && window._FB.ok()){
     try{
-      await window._fb.saveRows();
-      await window._fb.saveRetos();
-      await window._fb.saveMetas();
-      await window._fb.saveConfig();
+      await window._FB.saveCol('colaboradores', rows);
+      await window._FB.saveCol('retos', retos);
+      await window._FB.saveCol('metas', metasMensuales);
+      await window._FB.saveDoc('config/main', {
+        roles, puestos, weights,
+        sheetUrl: $('sheetUrl')?$('sheetUrl').value:'',
+        autoSync, syncSec: $('syncSec')?$('syncSec').value:'60',
+        notifConfig
+      });
     }catch(e){ console.warn('Firebase save error:',e); }
   }
 }
@@ -2319,9 +2263,8 @@ if($('savePass')) $('savePass').onclick=async()=>{
   if(!v){setStatus('Escribe una contraseña.','err');return;}
   if(v.length<6){setStatus('Mínimo 6 caracteres.','err');return;}
   adminPasswordHash=await hashPassword(v);
-  // Guardar en localStorage Y Firebase
   localStorage.setItem(PASS_KEY,adminPasswordHash);
-  if(window._fb) await window._fb.savePassword(adminPasswordHash);
+  if(window._FB && window._FB.ok()) await window._FB.saveDoc('config/password',{hash:adminPasswordHash});
   $('newPass').value=''; setStatus('Contraseña actualizada y sincronizada.','ok');
 };
 
@@ -2475,19 +2418,26 @@ if($('saveNotifConfig')) $('saveNotifConfig').onclick = ()=>{
 };
 
 // ═══════════════════════════════════════════════════════
-// INIT — Firebase carga los datos en el módulo <script type="module">
-// Este bloque solo corre si Firebase NO está disponible (fallback)
+// INIT
 // ═══════════════════════════════════════════════════════
-if(!window._fb){
-  // Fallback sin Firebase
+(async()=>{
+  // 1. Cargar localStorage como estado inicial rápido
   load();
   loadNotifConfig();
   initPhotoUpload();
+  render(); // primer render con datos locales
+
+  // 2. Cargar Firebase (sobreescribe con datos en la nube)
+  if(window._FB && window._FB.ok()){
+    await window._FB.loadAll();
+    window._FB.listen(); // suscripción tiempo real
+  }
+
+  // 3. Arranque final
   if(autoSync) setAutoSync(true);
-  render();
+  render(); // segundo render con datos de Firebase
   setTimeout(triggerNotificaciones, 800);
-}
-// Si Firebase SÍ está — el arranque lo maneja el módulo en DOMContentLoaded
+})();
 </script>
 </body>
 </html>
