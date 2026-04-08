@@ -3,55 +3,53 @@
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Tendencys Commercial Excellence</title>
-<!-- Firebase SDK (compat — funciona como script global, sin módulos) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
-// ═══════════════════════════════════════════════════════
-// FIREBASE INIT — compat SDK (scope global, sin import/export)
-// ═══════════════════════════════════════════════════════
-const _firebaseConfig = {
-  apiKey:            "AIzaSyAyzyJcSeSY6vmdx7qjq4WK7_upKmi1qgE",
-  authDomain:        "excellence-awards-85228.firebaseapp.com",
-  projectId:         "excellence-awards-85228",
-  storageBucket:     "excellence-awards-85228.firebasestorage.app",
-  messagingSenderId: "1036233857933",
-  appId:             "1:1036233857933:web:90f36513df13caf8027bc4"
-};
-
+// Firebase se inicializa al final del body una vez que los SDKs están cargados
 let _db = null;
-try {
-  if (!firebase.apps.length) firebase.initializeApp(_firebaseConfig);
-  _db = firebase.firestore();
-} catch(e) { console.warn('Firebase init error:', e); }
-
-// ─── Helpers ──────────────────────────────────────────
 const FB = {
   ok: () => !!_db,
 
-  async saveCol(colName, arr){
+  // Guarda UN documento individual
+  async saveDoc(colOrPath, dataOrId, data){
     if(!_db) return;
     try{
-      const batch = _db.batch();
-      arr.forEach(item => {
-        const ref = _db.collection(colName).doc(String(item.id));
-        batch.set(ref, item);
-      });
-      // Borrar documentos que ya no existen
-      const snap = await _db.collection(colName).get();
-      const ids  = new Set(arr.map(x => String(x.id)));
-      snap.docs.forEach(d => { if(!ids.has(d.id)) batch.delete(d.ref); });
-      await batch.commit();
-    } catch(e){ console.warn(`FB.saveCol(${colName})`, e); }
+      let ref;
+      if(data !== undefined){
+        ref = _db.collection(colOrPath).doc(String(dataOrId));
+        await ref.set(data);
+      } else {
+        const parts = colOrPath.split('/');
+        ref = _db.collection(parts[0]).doc(parts[1]);
+        await ref.set(dataOrId, {merge:true});
+      }
+    } catch(e){
+      console.error('FB.saveDoc error:', colOrPath, e);
+      fbSetStatus('err');
+    }
   },
 
-  async saveDoc(path, data){
-    if(!_db) return;
+  // Guarda una colección completa doc a doc (sin batch, sin reads previos)
+  async saveCol(colName, arr){
+    if(!_db || !arr || !arr.length) return;
     try{
-      const parts = path.split('/');
-      await _db.collection(parts[0]).doc(parts[1]).set(data, {merge:true});
-    } catch(e){ console.warn(`FB.saveDoc(${path})`, e); }
+      // Guardar/actualizar cada documento
+      const promises = arr.map(item =>
+        _db.collection(colName).doc(String(item.id)).set(item)
+      );
+      await Promise.all(promises);
+      console.log(`✅ Firebase: ${arr.length} docs guardados en /${colName}`);
+    } catch(e){
+      console.error(`FB.saveCol(${colName}) error:`, e);
+      fbSetStatus('err');
+    }
+  },
+
+  // Elimina un documento específico
+  async deleteDoc(colName, id){
+    if(!_db) return;
+    try{ await _db.collection(colName).doc(String(id)).delete(); }
+    catch(e){ console.warn('FB.deleteDoc error:', colName, id, e); }
   },
 
   async loadAll(){
@@ -68,11 +66,6 @@ const FB = {
 
       if(colabSnap.docs.length)
         rows = colabSnap.docs.map(d => d.data());
-      else {
-        // Firestore vacío → migrar desde localStorage
-        const local = localStorage.getItem('tendencys-v5');
-        if(local){ try{ const p=JSON.parse(local); if(p.rows?.length){ rows=p.rows; await FB.saveCol('colaboradores',rows); } }catch(e){} }
-      }
 
       if(retosSnap.docs.length)
         retos = retosSnap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
@@ -82,8 +75,8 @@ const FB = {
 
       if(cfgSnap.exists()){
         const s = cfgSnap.data();
-        if(s.roles)       roles    = s.roles;
         if(s.puestos)     puestos  = s.puestos;
+        if(s.paises)      paises   = s.paises;
         if(s.weights)     weights  = {...weights,...s.weights};
         if(s.notifConfig) notifConfig = {...notifConfig,...s.notifConfig};
         if(s.sheetUrl && document.getElementById('sheetUrl'))  document.getElementById('sheetUrl').value = s.sheetUrl;
@@ -102,11 +95,11 @@ const FB = {
       }
 
       fbSetStatus('ok');
+      console.log('Firebase cargado ✅ — colaboradores:', rows.length);
       return true;
     } catch(e){
       console.error('FB.loadAll error:', e);
       fbSetStatus('err');
-      // Fallback localStorage
       try{ const s=JSON.parse(localStorage.getItem('tendencys-v5')||'null'); if(s?.rows) rows=s.rows; }catch(ex){}
       return false;
     }
@@ -114,7 +107,6 @@ const FB = {
 
   listen(){
     if(!_db) return;
-    // Colaboradores — tiempo real
     _db.collection('colaboradores').onSnapshot(snap=>{
       rows = snap.docs.map(d=>d.data());
       _filteredCache = null;
@@ -122,7 +114,6 @@ const FB = {
       fbSetStatus('ok');
     }, err=>{ console.warn('onSnapshot colaboradores',err); fbSetStatus('err'); });
 
-    // Retos
     _db.collection('retos').onSnapshot(snap=>{
       retos = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
       if(typeof renderRetoBox==='function') renderRetoBox();
@@ -130,19 +121,22 @@ const FB = {
       if(typeof triggerNotificaciones==='function') triggerNotificaciones();
     });
 
-    // Metas
     _db.collection('metas').onSnapshot(snap=>{
       metasMensuales = snap.docs.map(d=>d.data()).sort((a,b)=>a.id-b.id);
       if(typeof renderMetasBox==='function') renderMetasBox();
       if(typeof renderMetasAdmin==='function') renderMetasAdmin();
     });
 
-    // Config
+    _db.collection('historial').onSnapshot(snap=>{
+      historialMeses = snap.docs.map(d=>d.data()).sort((a,b)=>a.mes.localeCompare(b.mes));
+      if(activeTab==='historial' && typeof renderHistorial==='function') renderHistorial();
+    });
+
     _db.collection('config').doc('main').onSnapshot(snap=>{
       if(!snap.exists) return;
       const s = snap.data();
-      if(s.roles)    roles   = s.roles;
       if(s.puestos)  puestos = s.puestos;
+      if(s.paises)   paises  = s.paises;
       if(s.weights)  weights = {...weights,...s.weights};
       if(typeof render==='function') render();
     });
@@ -412,7 +406,28 @@ h1{margin:14px 0 6px;font-size:38px;line-height:1;text-transform:uppercase}
 @keyframes toastBar{from{width:100%}to{width:0}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 
-/* MISC */
+/* TV MODE BTNS */
+.tvModeBtn{width:auto;padding:8px 14px;font-size:12px}
+.tvModeBtn.active{background:var(--orange);border-color:transparent}
+
+/* TV COMPARATIVO */
+.tvCompGrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.tvCompCol{border-radius:20px;padding:18px;border:1px solid var(--line);background:rgba(0,0,0,.18)}
+.tvCompColHead{font-size:20px;font-weight:900;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.tvCompRow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.tvCompRank{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:14px;background:rgba(255,255,255,.08);flex-shrink:0}
+.tvCompBar{flex:1;height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:4px}
+.tvCompBarFill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .6s ease}
+
+/* TV GANADORES */
+.tvGanGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.tvGanCard{border-radius:22px;padding:22px;border:1px solid var(--line);background:rgba(0,0,0,.18);text-align:center}
+.tvGanIcon{font-size:36px;margin-bottom:10px}
+.tvGanLabel{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:8px}
+.tvGanName{font-size:18px;font-weight:900;color:#fff2cb;margin-bottom:4px}
+.tvGanMeta{font-size:13px;color:var(--muted)}
+
+@media(max-width:900px){.tvCompGrid{grid-template-columns:1fr}.tvGanGrid{grid-template-columns:1fr 1fr}}
 .hidden{display:none!important}
 .sep{height:1px;background:var(--line);margin:14px 0}
 section{animation:fadeIn .22s ease}
@@ -445,6 +460,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
 <!-- TABS -->
 <div class="tabs">
   <button class="tab active" id="tabBoard">📊 Tablero</button>
+  <button class="tab" id="tabHistorial">📈 Historial</button>
   <button class="tab" id="tabAdmin">🔐 Administrador</button>
   <button class="tab" id="tabTv">📺 Modo TV</button>
   <button class="tab" id="tabRules">📋 Reglas</button>
@@ -477,13 +493,13 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
 <!-- ===== BOARD ===== -->
 <section id="boardView">
   <div class="card" style="margin-bottom:18px">
-    <div class="toolbar">
-      <input id="search" class="input" placeholder="🔍 Buscar por nombre, rol, puesto o servicio…">
-      <select id="roleFilter" class="select">
-        <option value="all">Todos los roles</option>
-      </select>
+    <div style="display:grid;grid-template-columns:1fr 160px 160px 160px 160px;gap:10px;flex-wrap:wrap">
+      <input id="search" class="input" placeholder="🔍 Buscar por nombre, puesto, servicio, país…">
+      <select id="puestoFilter" class="select"><option value="all">Todos los puestos</option></select>
+      <select id="servicioFilter" class="select"><option value="all">Todos los servicios</option></select>
+      <select id="paisFilter" class="select"><option value="all">Todos los países</option></select>
       <select id="sortBy" class="select">
-        <option value="score">Ordenar por Score</option>
+        <option value="score">Score</option>
         <option value="meta">% Meta</option>
         <option value="hp">HP</option>
         <option value="cross">Cross</option>
@@ -527,7 +543,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
   <!-- ADMIN SUB-TABS -->
   <div class="adminTabs">
     <button class="adminTab active" data-atab="colaboradores">👥 Colaboradores</button>
-    <button class="adminTab" data-atab="puestos">🏷️ Roles y Puestos</button>
+    <button class="adminTab" data-atab="puestos">🏷️ Puestos y Países</button>
     <button class="adminTab" data-atab="metas">📅 Metas Mensuales</button>
     <button class="adminTab" data-atab="retos">⚡ Retos</button>
     <button class="adminTab" data-atab="fuentes">📡 Fuentes de Datos</button>
@@ -556,8 +572,8 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
           <div style="flex:1;display:grid;gap:8px">
             <input id="mNombre"    class="input" placeholder="Nombre completo *">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <select id="mRol"    class="select"><option value="">— Rol —</option></select>
               <select id="mPuesto" class="select"><option value="">— Puesto —</option></select>
+              <select id="mPais"   class="select"><option value="">— País —</option></select>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
               <input id="mServicio" class="input" placeholder="Tipo de servicio">
@@ -630,34 +646,34 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
     </div>
   </div>
 
-  <!-- SUB: ROLES Y PUESTOS -->
+  <!-- SUB: PUESTOS Y PAÍSES -->
   <div id="atab-puestos" class="adminSection">
     <div class="grid2">
       <div class="card">
-        <div class="small" style="margin-bottom:12px">Gestionar Roles</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="newRol" class="input" placeholder="Nombre del rol (ej. AE, SDR…)">
-          <button id="addRolBtn" class="btn green" style="width:auto;white-space:nowrap;padding:11px 18px">+ Agregar</button>
-        </div>
-        <div class="puestoList" id="rolesList"></div>
-
-        <div class="sep"></div>
         <div class="small" style="margin-bottom:12px">Gestionar Puestos</div>
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <input id="newPuesto" class="input" placeholder="Nombre del puesto (ej. Sales Rep, Account Executive…)">
           <button id="addPuestoBtn" class="btn green" style="width:auto;white-space:nowrap;padding:11px 18px">+ Agregar</button>
         </div>
         <div class="puestoList" id="puestosList"></div>
+
+        <div class="sep"></div>
+        <div class="small" style="margin-bottom:12px">Gestionar Países</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="newPais" class="input" placeholder="Nombre del país (ej. México, Colombia…)">
+          <button id="addPaisBtn" class="btn green" style="width:auto;white-space:nowrap;padding:11px 18px">+ Agregar</button>
+        </div>
+        <div class="puestoList" id="paisesList"></div>
       </div>
       <div class="card">
-        <div class="small" style="margin-bottom:10px">Vista previa — filtros de tablero</div>
-        <div class="sub" style="font-size:13px">Los roles y puestos aquí definidos se usarán en el dropdown de filtro del tablero y al registrar colaboradores. Puedes tener roles personalizados además de los predeterminados.</div>
-        <div class="sep"></div>
-        <div class="small" style="margin-bottom:8px">Roles actuales</div>
-        <div id="previewRoles" style="font-size:13px;color:var(--muted)"></div>
+        <div class="small" style="margin-bottom:10px">Vista previa — filtros del tablero</div>
+        <div class="sub" style="font-size:13px">Los puestos y países aquí definidos se usarán en los filtros del tablero y al registrar colaboradores.</div>
         <div class="sep"></div>
         <div class="small" style="margin-bottom:8px">Puestos actuales</div>
         <div id="previewPuestos" style="font-size:13px;color:var(--muted)"></div>
+        <div class="sep"></div>
+        <div class="small" style="margin-bottom:8px">Países actuales</div>
+        <div id="previewPaises" style="font-size:13px;color:var(--muted)"></div>
       </div>
     </div>
   </div>
@@ -708,7 +724,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
             <div>
               <div class="small" style="margin-bottom:5px">Estado</div>
               <select id="retoEstado" class="select">
-                <option value="activo">🔴 Activo</option>
+                <option value="activo">✅ Activo</option>
                 <option value="pasado">⚫ Pasado</option>
               </select>
             </div>
@@ -817,17 +833,108 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
 
 </section>
 
+<!-- ===== HISTORIAL ===== -->
+<section id="historialView" class="hidden">
+  <div class="card heroMain" style="margin-bottom:18px">
+    <div class="eyebrow">Comparativo mensual</div>
+    <h1 style="font-size:26px">Historial por colaborador</h1>
+    <div class="sub">Compara el rendimiento mes a mes. Selecciona un colaborador para ver su evolución.</div>
+  </div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="small" style="margin-bottom:10px">Seleccionar colaborador</div>
+      <select id="histColabSelect" class="select" style="margin-bottom:12px"><option value="">— Elige un colaborador —</option></select>
+      <div id="histColabCard"></div>
+    </div>
+    <div class="card">
+      <div class="small" style="margin-bottom:10px">Comparar dos meses</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <div class="small" style="margin-bottom:5px">Mes A</div>
+          <select id="histMesA" class="select"><option value="">— Mes —</option></select>
+        </div>
+        <div>
+          <div class="small" style="margin-bottom:5px">Mes B</div>
+          <select id="histMesB" class="select"><option value="">— Mes —</option></select>
+        </div>
+      </div>
+      <div id="histComparativo"></div>
+    </div>
+  </div>
+  <!-- Tabla historial completo -->
+  <div class="card">
+    <div class="small" style="margin-bottom:14px">📊 Evolución mes a mes</div>
+    <div id="histTabla" style="overflow-x:auto"></div>
+  </div>
+  <!-- Ranking por mes -->
+  <div class="card" style="margin-top:18px">
+    <div class="small" style="margin-bottom:14px">🏆 Ranking por mes</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <select id="histRankMes" class="select" style="max-width:200px"><option value="">— Selecciona un mes —</option></select>
+      <select id="histRankMetrica" class="select" style="max-width:160px">
+        <option value="score">Score total</option>
+        <option value="porcentajeMeta">% Meta</option>
+        <option value="hp">HP</option>
+        <option value="serviciosExtra">Cross</option>
+      </select>
+    </div>
+    <div id="histRanking"></div>
+  </div>
+</section>
+
 <!-- ===== TV ===== -->
 <section id="tvView" class="hidden">
+
+  <!-- Panel de control TV -->
+  <div class="card" style="margin-bottom:18px;padding:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="small" style="color:var(--text)">Mostrar:</div>
+        <div id="tvModeGroup" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn tvModeBtn active" data-tvmode="ranking" style="padding:8px 14px;font-size:12px">🏆 Ranking actual</button>
+          <button class="btn tvModeBtn" data-tvmode="mes" style="padding:8px 14px;font-size:12px">📅 Por mes</button>
+          <button class="btn tvModeBtn" data-tvmode="comparativo" style="padding:8px 14px;font-size:12px">⚡ Comparativo</button>
+          <button class="btn tvModeBtn" data-tvmode="ganadores" style="padding:8px 14px;font-size:12px">🥇 Ganadores</button>
+        </div>
+      </div>
+
+      <!-- Controles por modo -->
+      <div id="tvCtrlMes" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="tvMesSelect" class="select" style="max-width:180px"><option value="">— Mes —</option></select>
+        <select id="tvMesMetrica" class="select" style="max-width:150px">
+          <option value="score">Score</option>
+          <option value="porcentajeMeta">% Meta</option>
+          <option value="hp">HP</option>
+          <option value="serviciosExtra">Cross</option>
+        </select>
+      </div>
+      <div id="tvCtrlComp" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="tvCompMesA" class="select" style="max-width:160px"><option value="">— Mes A —</option></select>
+        <span style="color:var(--muted);font-weight:700">vs</span>
+        <select id="tvCompMesB" class="select" style="max-width:160px"><option value="">— Mes B —</option></select>
+        <select id="tvCompMetrica" class="select" style="max-width:140px">
+          <option value="score">Score</option>
+          <option value="porcentajeMeta">% Meta</option>
+          <option value="hp">HP</option>
+          <option value="serviciosExtra">Cross</option>
+        </select>
+      </div>
+
+      <div class="tvClock" id="tvClock"></div>
+    </div>
+  </div>
+
+  <!-- Cabecera TV -->
   <div class="tvHeader">
     <div>
       <div class="eyebrow">Tendencys Commercial Excellence</div>
-      <div style="font-size:32px;font-weight:900;text-transform:uppercase;margin-top:8px">TV Board</div>
+      <div style="font-size:28px;font-weight:900;text-transform:uppercase;margin-top:6px" id="tvTitle">TV Board</div>
       <div class="sub" id="tvSub"></div>
     </div>
-    <div class="tvClock" id="tvClock"></div>
   </div>
-  <div class="rows" id="tvRows"></div>
+
+  <!-- Contenido dinámico -->
+  <div id="tvContent"></div>
 </section>
 
 <!-- ===== RULES ===== -->
@@ -890,38 +997,35 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
 const STORAGE_KEY = 'tendencys-v5';
 const PASS_KEY    = 'tendencys-pass-v5';
 const SESSION_MIN = 15;
-const DEFAULT_ROLES   = ['SDR','MDR','BDR','AE'];
 const DEFAULT_PUESTOS = ['Sales Representative','Account Executive','Business Developer','Market Developer'];
+const DEFAULT_PAISES  = ['México','Colombia','Argentina','Chile','Perú'];
 
 const DEMO = [
-  {id:1,nombre:'Ana P.',    rol:'SDR',puesto:'Sales Representative', servicio:'Freight', tipoServicio:'Freight',
-   porcentajeMeta:210,hp:18,serviciosExtra:3,bellLine:1,bellRecharge:0,elegible:1,awards:'double,bell',
-   fechaIngreso:'2024-01-15',foto:'',
-   fechaDoble:'2026-03-08',                          // fecha en que alcanzó 200%
-   bellEstado:'activo',                               // activo | completado-pendiente | completado-pagado
-   bellEscalonesAcum:0,                              // escalones históricos acumulados (para Dic 2026)
-   recargas:[]},                                     // [{fecha,monto,cliente,estado}]
-  {id:2,nombre:'Carlos R.', rol:'MDR',puesto:'Market Developer',     servicio:'Parcel',  tipoServicio:'Parcel',
-   porcentajeMeta:165,hp:32,serviciosExtra:1,bellLine:0,bellRecharge:1,elegible:1,awards:'record',
-   fechaIngreso:'2023-06-01',foto:'',
-   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,
+  {id:1,nombre:'Ana P.',    puesto:'Sales Representative', pais:'México',   servicio:'Freight', tipoServicio:'Freight',
+   porcentajeMeta:210,hp:18,serviciosExtra:3,bellLine:1,elegible:1,awards:'double,bell',
+   fechaIngreso:'2024-01-15',foto:'',fechaDoble:'2026-03-08',
+   bellEstado:'activo',bellEscalonesAcum:0,recargas:[]},
+  {id:2,nombre:'Carlos R.', puesto:'Market Developer',     pais:'Colombia', servicio:'Parcel',  tipoServicio:'Parcel',
+   porcentajeMeta:165,hp:32,serviciosExtra:1,bellLine:0,elegible:1,awards:'record',
+   fechaIngreso:'2023-06-01',foto:'',fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,
    recargas:[{fecha:'2026-03-15',monto:150000,cliente:'Empresa ABC',estado:'pagada'}]},
-  {id:3,nombre:'Laura M.',  rol:'SDR',puesto:'Sales Representative', servicio:'Air',     tipoServicio:'Air',
-   porcentajeMeta:145,hp:14,serviciosExtra:4,bellLine:1,bellRecharge:0,elegible:1,awards:'cross',
-   fechaIngreso:'2024-03-10',foto:'',
-   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]},
-  {id:4,nombre:'Jorge S.',  rol:'MDR',puesto:'Account Executive',    servicio:'Air',     tipoServicio:'Parcel',
-   porcentajeMeta:188,hp:28,serviciosExtra:2,bellLine:0,bellRecharge:0,elegible:0,awards:'',
-   fechaIngreso:'2022-11-20',foto:'',
-   fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]}
+  {id:3,nombre:'Laura M.',  puesto:'Sales Representative', pais:'México',   servicio:'Air',     tipoServicio:'Air',
+   porcentajeMeta:145,hp:14,serviciosExtra:4,bellLine:1,elegible:1,awards:'cross',
+   fechaIngreso:'2024-03-10',foto:'',fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]},
+  {id:4,nombre:'Jorge S.',  puesto:'Account Executive',    pais:'Argentina',servicio:'Air',     tipoServicio:'Parcel',
+   porcentajeMeta:188,hp:28,serviciosExtra:2,bellLine:0,elegible:0,awards:'',
+   fechaIngreso:'2022-11-20',foto:'',fechaDoble:'',bellEstado:'activo',bellEscalonesAcum:0,recargas:[]}
 ];
 
 // ═══════════════════════════════════════════════════════
 // ESTADO
 // ═══════════════════════════════════════════════════════
 let rows     = JSON.parse(JSON.stringify(DEMO));
-let roles    = [...DEFAULT_ROLES];
 let puestos  = [...DEFAULT_PUESTOS];
+let paises   = [...DEFAULT_PAISES];
+// historialMeses: snapshot de métricas por mes para comparativo
+// [{mes:'Abril 2026', fecha:'2026-04-30', datos:[{id,nombre,puesto,pais,...metricas}]}]
+let historialMeses = [];
 
 // Retos: array de objetos
 let retos = [{
@@ -946,7 +1050,7 @@ let editingId = null, editingRetoId = null;
 let autoSync = false, syncTimer = null;
 let isFetching = false, abortController = null;
 let weights = {meta:0.5, hp:3, cross:20, bell:25};
-let _photoBase64 = ''; // foto en edición/nuevo
+let _photoBase64 = '';
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -1057,10 +1161,18 @@ function badges(r){
 let _filteredCache = null;
 function filtered(){
   if(_filteredCache) return _filteredCache;
-  const q=$('search').value.toLowerCase();
+  const q      = $('search').value.toLowerCase();
+  const fPuesto = $('puestoFilter') ? $('puestoFilter').value : 'all';
+  const fServ   = $('servicioFilter') ? $('servicioFilter').value : 'all';
+  const fPais   = $('paisFilter') ? $('paisFilter').value : 'all';
   _filteredCache = [...rows]
-    .filter(r=>`${r.nombre} ${r.rol} ${r.puesto||''} ${r.servicio}`.toLowerCase().includes(q)
-             && ($('roleFilter').value==='all'||r.rol===$('roleFilter').value))
+    .filter(r=>{
+      const txt = `${r.nombre} ${r.puesto||''} ${r.servicio||''} ${r.pais||''} ${r.tipoServicio||''}`.toLowerCase();
+      return txt.includes(q)
+        && (fPuesto==='all' || r.puesto===fPuesto)
+        && (fServ==='all'   || r.tipoServicio===fServ || r.servicio===fServ)
+        && (fPais==='all'   || r.pais===fPais);
+    })
     .sort((a,b)=>{
       const s=$('sortBy').value;
       if(s==='meta')       return b.porcentajeMeta-a.porcentajeMeta;
@@ -1180,8 +1292,8 @@ function rowCardHtml(r,i,actions){
       </div>
       <div>
         <div class="personName">${esc(r.nombre)}</div>
-        <div class="personPuesto">${esc(r.puesto||r.rol)}</div>
-        <div class="personMeta">${esc(r.rol)} · ${esc(r.servicio)}</div>
+        <div class="personPuesto">${esc(r.puesto||'—')}</div>
+        <div class="personMeta">${esc(r.pais||'')}${r.pais&&r.servicio?' · ':''}${esc(r.servicio||'')}</div>
         ${r.fechaIngreso?`<div class="personDate">📅 Ingreso: ${formatFecha(r.fechaIngreso)} · ${esc(antStr)}</div>`:''}
         ${doubleBadge}
         ${r.elegible==0?'<div style="font-size:11px;color:#ffb088;margin-top:4px">⚠️ No elegible Double</div>':''}
@@ -1216,39 +1328,39 @@ function setStatus(msg,type=''){
 // PERSISTENCIA — Firebase + localStorage fallback
 // ═══════════════════════════════════════════════════════
 async function save(){
-  // Siempre guardar en localStorage como cache offline
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    rows, roles, puestos, retos, metasMensuales, weights,
+    rows, puestos, paises, retos, metasMensuales, historialMeses, weights,
     sheetUrl: $('sheetUrl')?$('sheetUrl').value:'',
     autoSync, syncSec: $('syncSec')?$('syncSec').value:'60'
   }));
-  // Sincronizar con Firebase si está disponible
   if(window._FB && window._FB.ok()){
+    console.log('💾 Guardando en Firebase...', rows.length, 'colaboradores');
     try{
       await window._FB.saveCol('colaboradores', rows);
       await window._FB.saveCol('retos', retos);
       await window._FB.saveCol('metas', metasMensuales);
+      await window._FB.saveCol('historial', historialMeses);
       await window._FB.saveDoc('config/main', {
-        roles, puestos, weights,
+        puestos, paises, weights,
         sheetUrl: $('sheetUrl')?$('sheetUrl').value:'',
         autoSync, syncSec: $('syncSec')?$('syncSec').value:'60',
         notifConfig
       });
-    }catch(e){ console.warn('Firebase save error:',e); }
-  }
+      console.log('✅ Firebase guardado correctamente');
+    }catch(e){ console.error('❌ Firebase save error:', e); }
+  } else { console.warn('⚠️ Firebase no disponible, solo localStorage'); }
 }
 
 function load(){
-  // load() ahora es solo fallback — Firebase carga en el módulo
-  // Se mantiene para compatibilidad en caso de fallo de red
   try{
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
     if(!s) return;
     if(s.rows)           rows           = s.rows;
-    if(s.roles)          roles          = s.roles;
     if(s.puestos)        puestos        = s.puestos;
+    if(s.paises)         paises         = s.paises;
     if(s.retos)          retos          = s.retos;
     if(s.metasMensuales) metasMensuales = s.metasMensuales;
+    if(s.historialMeses) historialMeses = s.historialMeses;
     if(s.sheetUrl && $('sheetUrl'))  $('sheetUrl').value = s.sheetUrl;
     if(s.syncSec  && $('syncSec'))   $('syncSec').value  = s.syncSec;
     if(typeof s.autoSync==='boolean') autoSync = s.autoSync;
@@ -1429,29 +1541,46 @@ function resetPhotoUpload(){
 // ═══════════════════════════════════════════════════════
 // POPULATE SELECTS
 // ═══════════════════════════════════════════════════════
-function populateRoleSelects(){
-  const opts = roles.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
-  // Filtro tablero
-  const rf=$('roleFilter');
-  if(rf){ rf.innerHTML=`<option value="all">Todos los roles</option>${opts}`; }
-  // Form colaborador
-  const mr=$('mRol');
-  if(mr){ mr.innerHTML=`<option value="">— Rol —</option>${opts}`; }
-}
-function populatePuestoSelect(){
-  const opts = puestos.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+function populatePuestoFilters(){
+  // Dropdown filtro de puestos
+  const fp=$('puestoFilter');
+  if(fp){
+    const vals=[...new Set(rows.map(r=>r.puesto||'').filter(Boolean))].sort();
+    fp.innerHTML=`<option value="all">Todos los puestos</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  }
+  // Dropdown filtro de servicios
+  const fs=$('servicioFilter');
+  if(fs){
+    const vals=[...new Set(rows.map(r=>r.tipoServicio||r.servicio||'').filter(Boolean))].sort();
+    fs.innerHTML=`<option value="all">Todos los servicios</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  }
+  // Dropdown filtro de países
+  const fp2=$('paisFilter');
+  if(fp2){
+    const vals=[...new Set(rows.map(r=>r.pais||'').filter(Boolean))].sort();
+    fp2.innerHTML=`<option value="all">Todos los países</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  }
+  // Select de puesto en formulario admin
   const mp=$('mPuesto');
-  if(mp){ mp.innerHTML=`<option value="">— Puesto —</option>${opts}`; }
+  if(mp) mp.innerHTML=`<option value="">— Puesto —</option>`+puestos.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  // Select de país en formulario admin
+  const mpais=$('mPais');
+  if(mpais) mpais.innerHTML=`<option value="">— País —</option>`+paises.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
 }
+// Alias por compatibilidad
+function populateRoleSelects(){ populatePuestoFilters(); }
+function populatePuestoSelect(){ populatePuestoFilters(); }
 
 // ═══════════════════════════════════════════════════════
 // RENDER TABS
 // ═══════════════════════════════════════════════════════
 function renderTabs(){
-  const map={board:'boardView',admin:'adminView',tv:'tvView',rules:'rulesView'};
-  ['board','admin','tv','rules'].forEach(t=>{
-    $(`tab${t[0].toUpperCase()+t.slice(1)}`).classList.toggle('active',activeTab===t);
-    $(map[t]).classList.toggle('hidden',activeTab!==t);
+  const map={board:'boardView',historial:'historialView',admin:'adminView',tv:'tvView',rules:'rulesView'};
+  ['board','historial','admin','tv','rules'].forEach(t=>{
+    const btn=$(`tab${t[0].toUpperCase()+t.slice(1)}`);
+    if(btn) btn.classList.toggle('active',activeTab===t);
+    const sec=$(map[t]);
+    if(sec) sec.classList.toggle('hidden',activeTab!==t);
   });
 }
 function renderAdminTabs(){
@@ -1773,22 +1902,21 @@ function renderAdminColab(){
 // RENDER ADMIN — ROLES Y PUESTOS
 // ═══════════════════════════════════════════════════════
 function renderPuestosAdmin(){
-  if($('rolesList')){
-    $('rolesList').innerHTML=roles.map((r,i)=>`
-      <div class="puestoTag">${esc(r)}
-        <button data-action="delrol" data-idx="${i}" style="background:none;border:none;color:#ff8888;cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Eliminar">×</button>
-      </div>`).join('');
-  }
   if($('puestosList')){
     $('puestosList').innerHTML=puestos.map((p,i)=>`
       <div class="puestoTag">${esc(p)}
         <button data-action="delpuesto" data-idx="${i}" style="background:none;border:none;color:#ff8888;cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Eliminar">×</button>
       </div>`).join('');
   }
-  if($('previewRoles'))  $('previewRoles').textContent  = roles.join(' · ') || '—';
+  if($('paisesList')){
+    $('paisesList').innerHTML=paises.map((p,i)=>`
+      <div class="puestoTag">${esc(p)}
+        <button data-action="delpais" data-idx="${i}" style="background:none;border:none;color:#ff8888;cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Eliminar">×</button>
+      </div>`).join('');
+  }
   if($('previewPuestos'))$('previewPuestos').textContent = puestos.join(' · ') || '—';
-  populateRoleSelects();
-  populatePuestoSelect();
+  if($('previewPaises')) $('previewPaises').textContent  = paises.join(' · ')  || '—';
+  populatePuestoFilters();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1862,13 +1990,191 @@ function renderRetosAdmin(){
 // ═══════════════════════════════════════════════════════
 // RENDER TV
 // ═══════════════════════════════════════════════════════
+// ─── Estado del modo TV ───────────────────────────────
+let tvMode = 'ranking'; // ranking | mes | comparativo | ganadores
+
+function initTvControls(){
+  // Botones de modo
+  document.querySelectorAll('.tvModeBtn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tvMode = btn.dataset.tvmode;
+      document.querySelectorAll('.tvModeBtn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      actualizarCtrlsTv();
+      renderTv();
+    });
+  });
+
+  // Selects dinámicos
+  ['tvMesSelect','tvMesMetrica','tvCompMesA','tvCompMesB','tvCompMetrica'].forEach(id=>{
+    const el=$(id); if(el) el.addEventListener('change', renderTv);
+  });
+}
+
+function actualizarCtrlsTv(){
+  const ctrlMes  = $('tvCtrlMes');
+  const ctrlComp = $('tvCtrlComp');
+  if(ctrlMes)  ctrlMes.style.display  = tvMode==='mes'         ? 'flex' : 'none';
+  if(ctrlComp) ctrlComp.style.display = tvMode==='comparativo' ? 'flex' : 'none';
+}
+
+function poblarSelectsTv(){
+  const mesesOpts = [...historialMeses].reverse()
+    .map(h=>`<option value="${esc(h.mes)}">${esc(h.mes)}</option>`).join('');
+  ['tvMesSelect','tvCompMesA','tvCompMesB'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    const actual = el.value;
+    const prefix = id==='tvCompMesA' ? '— Mes A —' : id==='tvCompMesB' ? '— Mes B —' : '— Mes —';
+    el.innerHTML=`<option value="">${prefix}</option>`+mesesOpts;
+    if(actual) el.value=actual;
+  });
+}
+
 function renderTv(){
-  const reto=retoActivo();
-  // tvSub se actualiza en renderRetoBox()
+  // Reloj
   const n=new Date();
-  $('tvClock').textContent=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const all=[...rows].sort((a,b)=>score(b)-score(a));
-  $('tvRows').innerHTML=all.map((r,i)=>rowCardHtml(r,i,'')).join('');
+  if($('tvClock')) $('tvClock').textContent=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  poblarSelectsTv();
+  actualizarCtrlsTv();
+
+  const cont = $('tvContent');
+  const title = $('tvTitle');
+  const sub   = $('tvSub');
+  if(!cont) return;
+
+  // ── MODO: RANKING ACTUAL ────────────────────────────
+  if(tvMode==='ranking'){
+    if(title) title.textContent='🏆 Ranking actual';
+    const reto=retoActivo();
+    if(sub) sub.textContent = reto ? `${reto.mes} · ${reto.descripcion}` : '';
+    const all=[...rows].sort((a,b)=>score(b)-score(a));
+    cont.innerHTML=`<div class="rows">${all.map((r,i)=>rowCardHtml(r,i,'')).join('')}</div>`;
+    return;
+  }
+
+  // ── MODO: POR MES ───────────────────────────────────
+  if(tvMode==='mes'){
+    const mes     = $('tvMesSelect')?.value;
+    const metrica = $('tvMesMetrica')?.value||'score';
+    const metricaLabels = {score:'Score',porcentajeMeta:'% Meta',hp:'HP',serviciosExtra:'Cross'};
+    if(title) title.textContent=`📅 Ranking — ${mes||'selecciona un mes'}`;
+    if(sub)   sub.textContent  = `Métrica: ${metricaLabels[metrica]||metrica}`;
+    if(!mes||!historialMeses.length){
+      cont.innerHTML=`<div class="sub" style="padding:40px;text-align:center;font-size:18px">Selecciona un mes para ver el ranking histórico.</div>`;
+      return;
+    }
+    const h=historialMeses.find(x=>x.mes===mes);
+    if(!h||!h.datos?.length){
+      cont.innerHTML=`<div class="sub" style="padding:40px;text-align:center">Sin datos para ${esc(mes)}.</div>`;
+      return;
+    }
+    const sorted=[...h.datos].sort((a,b)=>toNum(b[metrica])-toNum(a[metrica]));
+    const maxVal=toNum(sorted[0]?.[metrica])||1;
+    const colors=['var(--orange)','var(--cyan)','var(--green)'];
+    cont.innerHTML=`<div style="display:grid;gap:12px">${sorted.map((d,i)=>{
+      const val=toNum(d[metrica]);
+      const pct=Math.round(val/maxVal*100);
+      const r=rows.find(x=>x.id===d.id);
+      const medalColor=i<3?colors[i]:'rgba(255,255,255,.1)';
+      return `<div style="display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:20px;border:1px solid var(--line);background:rgba(0,0,0,.18)">
+        <div style="width:52px;height:52px;border-radius:18px;display:grid;place-items:center;background:${medalColor};font-weight:900;font-size:20px;flex-shrink:0">#${i+1}</div>
+        ${r?avatarHtml(r,52):`<div style="width:52px;height:52px;border-radius:18px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:18px;font-weight:900;color:#7dd8e8;flex-shrink:0">${esc((d.nombre||'?').split(' ').map(x=>x[0]).join('').slice(0,2))}</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:18px;font-weight:900">${esc(d.nombre)}</div>
+          <div style="font-size:13px;color:var(--muted)">${esc(d.puesto||'—')} · ${esc(d.pais||'—')}</div>
+          <div class="tvCompBar" style="margin-top:8px"><div class="tvCompBarFill" style="width:${pct}%;${i===0?'background:var(--orange)':''}"></div></div>
+        </div>
+        <div style="font-size:32px;font-weight:900;color:${i===0?'var(--gold)':'var(--text)'};text-align:right;min-width:80px">
+          ${val}${metrica==='porcentajeMeta'?'%':''}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+    return;
+  }
+
+  // ── MODO: COMPARATIVO ──────────────────────────────
+  if(tvMode==='comparativo'){
+    const mesA    = $('tvCompMesA')?.value;
+    const mesB    = $('tvCompMesB')?.value;
+    const metrica = $('tvCompMetrica')?.value||'score';
+    const metricaLabels = {score:'Score',porcentajeMeta:'% Meta',hp:'HP',serviciosExtra:'Cross'};
+    if(title) title.textContent=`⚡ Comparativo`;
+    if(sub)   sub.textContent  = mesA&&mesB ? `${mesA} vs ${mesB} · ${metricaLabels[metrica]}` : 'Selecciona dos meses';
+    if(!mesA||!mesB){
+      cont.innerHTML=`<div class="sub" style="padding:40px;text-align:center;font-size:18px">Selecciona dos meses para comparar.</div>`;
+      return;
+    }
+    const hA=historialMeses.find(x=>x.mes===mesA);
+    const hB=historialMeses.find(x=>x.mes===mesB);
+    if(!hA||!hB){
+      cont.innerHTML=`<div class="sub" style="padding:40px;text-align:center">Sin datos para uno de los meses.</div>`;
+      return;
+    }
+    const sortedA=[...hA.datos].sort((a,b)=>toNum(b[metrica])-toNum(a[metrica]));
+    const sortedB=[...hB.datos].sort((a,b)=>toNum(b[metrica])-toNum(a[metrica]));
+    const maxA=toNum(sortedA[0]?.[metrica])||1;
+    const maxB=toNum(sortedB[0]?.[metrica])||1;
+    const maxAll=Math.max(maxA,maxB)||1;
+
+    const colHtml=(datos,mes,maxV)=>`
+      <div class="tvCompCol">
+        <div class="tvCompColHead" style="color:var(--cyan)">${esc(mes)}</div>
+        ${datos.map((d,i)=>{
+          const val=toNum(d[metrica]);
+          const pct=Math.round(val/maxV*100);
+          const r=rows.find(x=>x.id===d.id);
+          // Buscar mismo colaborador en el otro mes para delta
+          return `<div class="tvCompRow">
+            <div class="tvCompRank" style="${i===0?'background:var(--orange)':i===1?'background:rgba(0,175,192,.3)':''}">#${i+1}</div>
+            ${r?avatarHtml(r,38):`<div style="width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:12px;font-weight:900;color:#7dd8e8;flex-shrink:0">${esc((d.nombre||'?').split(' ').map(x=>x[0]).join('').slice(0,2))}</div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:900">${esc(d.nombre)}</div>
+              <div class="tvCompBar"><div class="tvCompBarFill" style="width:${pct}%;${i===0?'background:var(--orange)':''}"></div></div>
+            </div>
+            <div style="font-weight:900;font-size:16px;color:${i===0?'var(--gold)':'var(--text)'};min-width:55px;text-align:right">${val}${metrica==='porcentajeMeta'?'%':''}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    cont.innerHTML=`<div class="tvCompGrid">${colHtml(sortedA,mesA,maxAll)}${colHtml(sortedB,mesB,maxAll)}</div>`;
+    return;
+  }
+
+  // ── MODO: GANADORES ─────────────────────────────────
+  if(tvMode==='ganadores'){
+    if(title) title.textContent='🥇 Ganadores del mes';
+    const reto=retoActivo();
+    if(sub) sub.textContent = reto ? reto.mes : '';
+
+    const dobles   = rows.filter(r=>doubleEligible(r)).sort((a,b)=>{
+      if(a.fechaDoble&&b.fechaDoble) return new Date(a.fechaDoble)-new Date(b.fechaDoble);
+      return a.fechaDoble?-1:1;
+    });
+    const records  = rows.filter(r=>recordWinner(r));
+    const crosses  = rows.filter(r=>crossWinner(r));
+    const bellsComp= rows.filter(r=>bellTotal(r)>=3);
+
+    const winnerCard=(icon,label,winners,color)=>`
+      <div class="tvGanCard" style="border-color:${color}22;background:linear-gradient(180deg,${color}14,${color}06)">
+        <div class="tvGanIcon">${icon}</div>
+        <div class="tvGanLabel">${label}</div>
+        ${winners.length ? winners.map((r,i)=>`
+          <div style="margin-bottom:${i<winners.length-1?'12px':'0'}">
+            <div style="display:flex;justify-content:center;margin-bottom:6px">${avatarHtml(r,48)}</div>
+            <div class="tvGanName">${esc(r.nombre)}</div>
+            <div class="tvGanMeta">${esc(r.puesto||'—')} · ${esc(r.pais||'—')}</div>
+          </div>`).join('') :
+          `<div class="tvGanMeta" style="margin-top:8px">Sin ganador aún</div>`}
+      </div>`;
+
+    cont.innerHTML=`<div class="tvGanGrid">
+      ${winnerCard('🥇','Double Performance',dobles.slice(0,2),'#e8451e')}
+      ${winnerCard('⚡','Récord Award',records.slice(0,2),'#00afc0')}
+      ${winnerCard('🔗','Cross-Service',crosses.slice(0,2),'#6ab221')}
+      ${winnerCard('🔔','Bell Completo',bellsComp.slice(0,2),'#7b3fa0')}
+    </div>`;
+  }
 }
 
 // Reloj TV + refresco contador de días cada minuto
@@ -1891,8 +2197,7 @@ function render(){
   _filteredCache=null;
   const list=filtered();
   renderTabs();
-  populateRoleSelects();
-  populatePuestoSelect();
+  populatePuestoFilters();
   renderTop(list);
   renderStats();
   renderRetoBox();
@@ -1908,6 +2213,7 @@ function render(){
     renderRetosAdmin();
   }
   if(activeTab==='tv') renderTv();
+  if(activeTab==='historial') renderHistorial();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1921,8 +2227,8 @@ function clearColabForm(){
   if($('mFechaIngreso'))$('mFechaIngreso').value='';
   if($('mFechaDoble'))  $('mFechaDoble').value='';
   if($('mBellEstado'))  $('mBellEstado').value='activo';
-  if($('mRol'))   $('mRol').value='';
-  if($('mPuesto'))$('mPuesto').value='';
+  if($('mPuesto'))      $('mPuesto').value='';
+  if($('mPais'))        $('mPais').value='';
   _colabRecargas=[];
   renderRecargasList();
   resetPhotoUpload();
@@ -1933,8 +2239,8 @@ function clearColabForm(){
 function fillColabForm(r){
   editingId=r.id;
   if($('mNombre'))      $('mNombre').value=r.nombre;
-  if($('mRol'))         $('mRol').value=r.rol;
   if($('mPuesto'))      $('mPuesto').value=r.puesto||'';
+  if($('mPais'))        $('mPais').value=r.pais||'';
   if($('mServicio'))    $('mServicio').value=r.servicio;
   if($('mFechaIngreso'))$('mFechaIngreso').value=r.fechaIngreso||'';
   if($('mFechaDoble'))  $('mFechaDoble').value=r.fechaDoble||'';
@@ -2005,7 +2311,9 @@ if($('addBtn')) $('addBtn').onclick=()=>{
   const nombre=($('mNombre').value||'').trim();
   if(!nombre){setStatus('Nombre obligatorio.','err');return;}
   const data={
-    nombre, rol:$('mRol').value, puesto:$('mPuesto').value,
+    nombre,
+    puesto:$('mPuesto').value,
+    pais:$('mPais').value,
     servicio:($('mServicio').value||'General').trim(),
     tipoServicio:($('mServicio').value||'General').trim(),
     porcentajeMeta:toNum($('mMeta').value), hp:toNum($('mHp').value),
@@ -2023,7 +2331,6 @@ if($('addBtn')) $('addBtn').onclick=()=>{
   if(editingId!==null){
     const idx=rows.findIndex(r=>r.id===editingId);
     if(idx>=0){
-      // Preservar bellEscalonesAcum histórico
       data.bellEscalonesAcum = rows[idx].bellEscalonesAcum||0;
       rows[idx]={...rows[idx],...data};
     }
@@ -2071,32 +2378,31 @@ if($('adminColabList')) $('adminColabList').addEventListener('click',e=>{
 // ═══════════════════════════════════════════════════════
 // DELEGACIÓN EVENTOS EN ROLES/PUESTOS
 // ═══════════════════════════════════════════════════════
-['rolesList','puestosList'].forEach(listId=>{
+['puestosList','paisesList'].forEach(listId=>{
   const el=$(listId); if(!el) return;
   el.addEventListener('click',e=>{
     const btn=e.target.closest('[data-action]'); if(!btn) return;
-    if(btn.dataset.action==='delrol'){
-      const i=parseInt(btn.dataset.idx,10);
-      if(roles.length<=1){setStatus('Debe haber al menos un rol.','err');return;}
-      roles.splice(i,1); save(); render();
-    }
     if(btn.dataset.action==='delpuesto'){
       const i=parseInt(btn.dataset.idx,10);
-      puestos.splice(i,1); save(); render();
+      puestos.splice(i,1); save(); renderPuestosAdmin(); render();
+    }
+    if(btn.dataset.action==='delpais'){
+      const i=parseInt(btn.dataset.idx,10);
+      paises.splice(i,1); save(); renderPuestosAdmin(); render();
     }
   });
 });
-if($('addRolBtn')) $('addRolBtn').onclick=()=>{
-  const v=($('newRol').value||'').trim().toUpperCase();
-  if(!v){setStatus('Escribe un nombre de rol.','err');return;}
-  if(roles.includes(v)){setStatus('Ese rol ya existe.','err');return;}
-  roles.push(v); $('newRol').value=''; save(); render(); setStatus(`Rol "${v}" agregado.`,'ok');
-};
 if($('addPuestoBtn')) $('addPuestoBtn').onclick=()=>{
   const v=($('newPuesto').value||'').trim();
   if(!v){setStatus('Escribe un nombre de puesto.','err');return;}
   if(puestos.includes(v)){setStatus('Ese puesto ya existe.','err');return;}
-  puestos.push(v); $('newPuesto').value=''; save(); render(); setStatus(`Puesto "${v}" agregado.`,'ok');
+  puestos.push(v); $('newPuesto').value=''; save(); renderPuestosAdmin(); setStatus(`Puesto "${v}" agregado.`,'ok');
+};
+if($('addPaisBtn')) $('addPaisBtn').onclick=()=>{
+  const v=($('newPais').value||'').trim();
+  if(!v){setStatus('Escribe un nombre de país.','err');return;}
+  if(paises.includes(v)){setStatus('Ese país ya existe.','err');return;}
+  paises.push(v); $('newPais').value=''; save(); renderPuestosAdmin(); setStatus(`País "${v}" agregado.`,'ok');
 };
 
 // ═══════════════════════════════════════════════════════
@@ -2111,11 +2417,12 @@ if($('saveMetasBtn')) $('saveMetasBtn').onclick=()=>{
     if(v) metas[r]=v;
   });
   const nueva={id:Date.now(),mes,tipo:$('metaTipo').value,metas,notas:($('metaNotas').value||'').trim()};
-  // Si ya existe el mes, reemplazar
   const idx=metasMensuales.findIndex(m=>m.mes===mes);
   if(idx>=0) metasMensuales[idx]=nueva;
   else metasMensuales.push(nueva);
-  save(); render(); setStatus(`Metas de ${mes} guardadas.`,'ok');
+  // Guardar snapshot del mes con métricas actuales
+  guardarSnapshotMes(mes);
+  save(); render(); setStatus(`Metas de ${mes} guardadas y snapshot generado.`,'ok');
 };
 
 // Delegación para eliminar meta
@@ -2203,7 +2510,8 @@ if($('retosHistorial')) $('retosHistorial').addEventListener('click',e=>{
 // ═══════════════════════════════════════════════════════
 // TABS EVENTOS
 // ═══════════════════════════════════════════════════════
-$('tabBoard').onclick  = ()=>{ activeTab='board'; render(); };
+$('tabBoard').onclick     = ()=>{ activeTab='board';     render(); };
+$('tabHistorial').onclick = ()=>{ activeTab='historial'; render(); renderHistorial(); };
 $('tabAdmin').onclick  = async ()=>{
   if(!adminUnlocked){
     const p=prompt('🔐 Ingresa la clave de administrador:');
@@ -2214,7 +2522,7 @@ $('tabAdmin').onclick  = async ()=>{
   }
   activeTab='admin'; render();
 };
-$('tabTv').onclick    = ()=>{ activeTab='tv';    render(); };
+$('tabTv').onclick    = ()=>{ activeTab='tv'; render(); initTvControls(); };
 $('tabRules').onclick = ()=>{ activeTab='rules'; render(); };
 $('logoutBtn').onclick = logout;
 
@@ -2235,8 +2543,9 @@ document.querySelectorAll('.adminTab').forEach(btn=>{
 // ═══════════════════════════════════════════════════════
 let _searchDebounce;
 $('search').addEventListener('input',()=>{ clearTimeout(_searchDebounce);_searchDebounce=setTimeout(render,150); });
-$('roleFilter').addEventListener('change',render);
-$('sortBy').addEventListener('change',render);
+['puestoFilter','servicioFilter','paisFilter','sortBy'].forEach(id=>{
+  const el=$(id); if(el) el.addEventListener('change',render);
+});
 
 // ═══════════════════════════════════════════════════════
 // FUENTES DE DATOS
@@ -2407,7 +2716,216 @@ function triggerNotificaciones(){
   if(notifConfig.modo==='banner'||notifConfig.modo==='ambos') renderNotifBanner();
 }
 
-// Guardar config notif
+// ═══════════════════════════════════════════════════════
+// HISTORIAL MENSUAL — snapshot y comparativo
+// ═══════════════════════════════════════════════════════
+
+// Guarda snapshot del mes actual (llamado desde Admin → Metas al guardar)
+function guardarSnapshotMes(mesLabel){
+  const existe = historialMeses.findIndex(h=>h.mes===mesLabel);
+  const snapshot = {
+    id: existe>=0 ? historialMeses[existe].id : Date.now(),
+    mes: mesLabel,
+    fecha: new Date().toISOString().split('T')[0],
+    datos: rows.map(r=>({
+      id:r.id, nombre:r.nombre, puesto:r.puesto||'', pais:r.pais||'',
+      servicio:r.servicio||'', tipoServicio:r.tipoServicio||'',
+      porcentajeMeta:toNum(r.porcentajeMeta), hp:toNum(r.hp),
+      serviciosExtra:toNum(r.serviciosExtra), bellTotal:bellTotal(r),
+      score:Math.round(score(r)), elegible:r.elegible,
+      doubleGanado:doubleEligible(r)?1:0,
+      recordGanado:recordWinner(r)?1:0,
+      crossGanado:crossWinner(r)?1:0,
+      bellEstado:r.bellEstado||'activo'
+    }))
+  };
+  if(existe>=0) historialMeses[existe]=snapshot;
+  else historialMeses.push(snapshot);
+}
+
+function renderHistorial(){
+  // Poblar selects de colaborador y meses
+  const colabSel=$('histColabSelect');
+  if(colabSel){
+    const sorted=[...rows].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    colabSel.innerHTML=`<option value="">— Elige un colaborador —</option>`+
+      sorted.map(r=>`<option value="${r.id}">${esc(r.nombre)} · ${esc(r.puesto||'')}</option>`).join('');
+  }
+  const mesesOpts = historialMeses.length
+    ? [...historialMeses].reverse().map(h=>`<option value="${esc(h.mes)}">${esc(h.mes)}</option>`).join('')
+    : '<option value="">Sin historial aún</option>';
+  if($('histMesA')) $('histMesA').innerHTML=`<option value="">— Mes A —</option>`+mesesOpts;
+  if($('histMesB')) $('histMesB').innerHTML=`<option value="">— Mes B —</option>`+mesesOpts;
+  if($('histRankMes')) $('histRankMes').innerHTML=`<option value="">— Selecciona un mes —</option>`+mesesOpts;
+
+  renderHistTabla();
+  renderHistRanking();
+
+  // Eventos de los selects
+  if(colabSel) colabSel.onchange = ()=>{ renderHistColabCard(); renderHistTabla(); };
+  if($('histMesA')) $('histMesA').onchange = renderHistComparativo;
+  if($('histMesB')) $('histMesB').onchange = renderHistComparativo;
+  if($('histRankMes'))    $('histRankMes').onchange    = renderHistRanking;
+  if($('histRankMetrica'))$('histRankMetrica').onchange = renderHistRanking;
+
+  if(!historialMeses.length){
+    if($('histTabla')) $('histTabla').innerHTML=`<div class="sub" style="padding:20px;text-align:center">Sin historial. Guarda las metas de un mes para generar el primer snapshot.</div>`;
+    if($('histRanking')) $('histRanking').innerHTML='';
+    if($('histComparativo')) $('histComparativo').innerHTML='';
+  }
+}
+
+function renderHistColabCard(){
+  const id = toNum($('histColabSelect').value);
+  const card=$('histColabCard');
+  if(!card) return;
+  if(!id){card.innerHTML='';return;}
+  const r = rows.find(x=>x.id===id);
+  if(!r){card.innerHTML='';return;}
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      ${avatarHtml(r,52)}
+      <div>
+        <div style="font-weight:900;font-size:16px">${esc(r.nombre)}</div>
+        <div style="color:var(--cyan);font-size:12px">${esc(r.puesto||'—')}</div>
+        <div style="color:var(--muted);font-size:12px">${esc(r.pais||'—')} · ${esc(r.servicio||'—')}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div class="scoreBox"><div class="small">Meta actual</div><div class="n" style="font-size:20px">${r.porcentajeMeta}%</div></div>
+      <div class="scoreBox"><div class="small">HP actual</div><div class="n" style="font-size:20px">${r.hp}</div></div>
+      <div class="scoreBox hl"><div class="small">Score actual</div><div class="n" style="font-size:20px">${Math.round(score(r))}</div></div>
+    </div>`;
+}
+
+function renderHistTabla(){
+  const cont=$('histTabla');
+  if(!cont) return;
+  if(!historialMeses.length){ cont.innerHTML='<div class="sub" style="padding:16px;text-align:center">Sin historial guardado.</div>'; return; }
+
+  const colabId = toNum($('histColabSelect')?.value||'0');
+  const mesesOrden = [...historialMeses].sort((a,b)=>a.mes.localeCompare(b.mes));
+
+  // Si hay colaborador seleccionado → tabla de su evolución
+  if(colabId){
+    const filas = mesesOrden.map(h=>{
+      const d = (h.datos||[]).find(x=>x.id===colabId);
+      return d ? {mes:h.mes, ...d} : {mes:h.mes,porcentajeMeta:'—',hp:'—',serviciosExtra:'—',score:'—',bellTotal:'—'};
+    });
+    cont.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="border-bottom:1px solid var(--line)">
+        <th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">Mes</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">% Meta</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">HP</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">Cross</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">Bell</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">Score</th>
+        <th style="padding:10px 12px;text-align:center;color:var(--muted);font-size:11px">Double</th>
+      </tr></thead>
+      <tbody>${filas.map((f,i)=>{
+        const prev = i>0?filas[i-1]:null;
+        const trend = (cur,pre)=>{
+          if(!prev||pre==='—'||cur==='—') return '';
+          return cur>pre?'<span style="color:var(--green)">↑</span>':cur<pre?'<span style="color:var(--danger)">↓</span>':'<span style="color:var(--muted)">→</span>';
+        };
+        return `<tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:10px 12px;font-weight:700">${esc(f.mes)}</td>
+          <td style="padding:10px 12px;text-align:center;color:${f.porcentajeMeta>=200?'var(--green)':f.porcentajeMeta>=150?'var(--cyan)':'var(--text)'}">${f.porcentajeMeta}% ${trend(f.porcentajeMeta,prev?.porcentajeMeta)}</td>
+          <td style="padding:10px 12px;text-align:center">${f.hp} ${trend(f.hp,prev?.hp)}</td>
+          <td style="padding:10px 12px;text-align:center">${f.serviciosExtra} ${trend(f.serviciosExtra,prev?.serviciosExtra)}</td>
+          <td style="padding:10px 12px;text-align:center">${f.bellTotal}/3</td>
+          <td style="padding:10px 12px;text-align:center;font-weight:900;color:var(--gold)">${f.score} ${trend(f.score,prev?.score)}</td>
+          <td style="padding:10px 12px;text-align:center">${f.doubleGanado?'🥇':'—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+    return;
+  }
+
+  // Sin colaborador seleccionado → resumen de todos los meses
+  cont.innerHTML=`<div style="display:grid;gap:10px">${mesesOrden.map(h=>{
+    const d=h.datos||[];
+    const topScore=[...d].sort((a,b)=>b.score-a.score)[0];
+    const topMeta=[...d].sort((a,b)=>b.porcentajeMeta-a.porcentajeMeta)[0];
+    return `<div style="padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:rgba(0,0,0,.14)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div style="font-weight:900;font-size:15px;color:#fff2cb">${esc(h.mes)}</div>
+        <div style="font-size:11px;color:var(--muted)">${d.length} colaboradores · guardado ${formatFecha(h.fecha)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+        <div class="info"><div class="small">🏆 Mayor Score</div><div style="font-weight:900;margin-top:4px">${topScore?esc(topScore.nombre):'—'}</div><div style="font-size:12px;color:var(--gold)">${topScore?topScore.score:''}</div></div>
+        <div class="info"><div class="small">🥇 Mayor Meta</div><div style="font-weight:900;margin-top:4px">${topMeta?esc(topMeta.nombre):'—'}</div><div style="font-size:12px;color:var(--green)">${topMeta?topMeta.porcentajeMeta+'%':''}</div></div>
+        <div class="info"><div class="small">⚡ Doubles</div><div style="font-size:24px;font-weight:900;margin-top:4px">${d.filter(x=>x.doubleGanado).length}</div></div>
+        <div class="info"><div class="small">🔔 Bell completo</div><div style="font-size:24px;font-weight:900;margin-top:4px">${d.filter(x=>x.bellTotal>=3).length}</div></div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderHistComparativo(){
+  const cont=$('histComparativo');
+  if(!cont) return;
+  const mesA=$('histMesA')?.value, mesB=$('histMesB')?.value;
+  if(!mesA||!mesB){cont.innerHTML='<div class="sub" style="font-size:12px">Selecciona dos meses para comparar.</div>';return;}
+  const hA=historialMeses.find(h=>h.mes===mesA);
+  const hB=historialMeses.find(h=>h.mes===mesB);
+  if(!hA||!hB){cont.innerHTML='<div class="sub" style="font-size:12px">Sin datos para uno de los meses.</div>';return;}
+
+  const metricas=[
+    {key:'porcentajeMeta',label:'% Meta promedio',fmt:v=>v.toFixed(1)+'%'},
+    {key:'hp',label:'HP promedio',fmt:v=>v.toFixed(1)},
+    {key:'score',label:'Score promedio',fmt:v=>v.toFixed(0)},
+    {key:'doubleGanado',label:'Doubles ganados',fmt:v=>v},
+    {key:'crossGanado',label:'Cross líderes',fmt:v=>v},
+  ];
+  const avg=(datos,key)=>datos.length ? datos.reduce((s,d)=>s+(toNum(d[key])||0),0)/datos.length : 0;
+  const sum=(datos,key)=>datos.reduce((s,d)=>s+(toNum(d[key])||0),0);
+
+  cont.innerHTML=`<div class="small" style="margin-bottom:10px">${esc(mesA)} vs ${esc(mesB)}</div>`+
+    metricas.map(m=>{
+      const vA = m.key.includes('Ganado')||m.key.includes('lider') ? sum(hA.datos||[],m.key) : avg(hA.datos||[],m.key);
+      const vB = m.key.includes('Ganado')||m.key.includes('lider') ? sum(hB.datos||[],m.key) : avg(hB.datos||[],m.key);
+      const mejor = vB>vA?'B':vA>vB?'A':'=';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px">
+        <span style="flex:1;color:var(--muted)">${m.label}</span>
+        <span style="font-weight:700;color:${mejor==='A'?'var(--green)':'var(--text)'}">${m.fmt(vA)}</span>
+        <span style="color:var(--muted);font-size:10px">vs</span>
+        <span style="font-weight:700;color:${mejor==='B'?'var(--green)':'var(--text)'}">${m.fmt(vB)}</span>
+        <span style="font-size:14px">${mejor==='B'?'↑':mejor==='A'?'↓':'→'}</span>
+      </div>`;
+    }).join('');
+}
+
+function renderHistRanking(){
+  const cont=$('histRanking');
+  if(!cont) return;
+  const mes=$('histRankMes')?.value;
+  const metrica=$('histRankMetrica')?.value||'score';
+  if(!mes){cont.innerHTML='<div class="sub" style="font-size:12px">Selecciona un mes.</div>';return;}
+  const h=historialMeses.find(x=>x.mes===mes);
+  if(!h||!h.datos?.length){cont.innerHTML='<div class="sub" style="font-size:12px">Sin datos para ese mes.</div>';return;}
+  const sorted=[...h.datos].sort((a,b)=>toNum(b[metrica])-toNum(a[metrica]));
+  const maxVal=toNum(sorted[0]?.[metrica])||1;
+  const labels={porcentajeMeta:'% Meta',hp:'HP',serviciosExtra:'Cross',score:'Score'};
+  cont.innerHTML=sorted.map((d,i)=>{
+    const val=toNum(d[metrica]);
+    const pct=Math.round(val/maxVal*100);
+    const r=rows.find(x=>x.id===d.id);
+    return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="width:28px;text-align:center;font-weight:900;font-size:14px;color:${i===0?'var(--orange)':i===1?'var(--cyan)':i===2?'var(--green)':'var(--muted)'}">#${i+1}</div>
+      ${r?avatarHtml(r,32):`<div style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:11px;font-weight:900">${esc(d.nombre.split(' ').map(x=>x[0]).join('').slice(0,2))}</div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700">${esc(d.nombre)}</div>
+        <div style="font-size:11px;color:var(--muted)">${esc(d.puesto||'—')} · ${esc(d.pais||'—')}</div>
+        <div class="hpBar" style="margin-top:4px"><div class="hpFill" style="width:${pct}%;${i===0?'background:var(--orange)':''}"></div></div>
+      </div>
+      <div style="font-weight:900;font-size:15px;color:${i===0?'var(--gold)':'var(--text)'};min-width:50px;text-align:right">${val}${metrica==='porcentajeMeta'?'%':''}</div>
+    </div>`;
+  }).join('');
+}
+
+// Guardar snapshot al guardar metas mensuales
+// (se llama desde saveMetasBtn.onclick)
 if($('saveNotifConfig')) $('saveNotifConfig').onclick = ()=>{
   saveNotifConfig();
   // Reset estado para que las notificaciones se re-evalúen con nueva config
@@ -2418,24 +2936,77 @@ if($('saveNotifConfig')) $('saveNotifConfig').onclick = ()=>{
 };
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// INIT — carga Firebase dinámicamente para garantizar que
+// los SDKs estén disponibles antes de usarlos
 // ═══════════════════════════════════════════════════════
+async function initFirebase(){
+  return new Promise((resolve)=>{
+    // Si ya está cargado (ej. recarga con cache)
+    if(typeof firebase !== 'undefined'){
+      try{
+        if(!firebase.apps.length) firebase.initializeApp({
+          apiKey:            "AIzaSyAyzyJcSeSY6vmdx7qjq4WK7_upKmi1qgE",
+          authDomain:        "excellence-awards-85228.firebaseapp.com",
+          projectId:         "excellence-awards-85228",
+          storageBucket:     "excellence-awards-85228.firebasestorage.app",
+          messagingSenderId: "1036233857933",
+          appId:             "1:1036233857933:web:90f36513df13caf8027bc4"
+        });
+        _db = firebase.firestore();
+        console.log('✅ Firebase SDK listo (desde cache)');
+      }catch(e){ console.warn('Firebase init error:', e); }
+      resolve(); return;
+    }
+    // Cargar SDKs dinámicamente
+    const load = (src) => new Promise((res,rej)=>{
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    Promise.all([
+      load('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js'),
+    ]).then(()=>
+      load('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js')
+    ).then(()=>{
+      try{
+        if(!firebase.apps.length) firebase.initializeApp({
+          apiKey:            "AIzaSyAyzyJcSeSY6vmdx7qjq4WK7_upKmi1qgE",
+          authDomain:        "excellence-awards-85228.firebaseapp.com",
+          projectId:         "excellence-awards-85228",
+          storageBucket:     "excellence-awards-85228.firebasestorage.app",
+          messagingSenderId: "1036233857933",
+          appId:             "1:1036233857933:web:90f36513df13caf8027bc4"
+        });
+        _db = firebase.firestore();
+        console.log('✅ Firebase SDK cargado y listo');
+      }catch(e){ console.error('Firebase init error:', e); }
+      resolve();
+    }).catch(e=>{
+      console.error('No se pudo cargar Firebase SDK:', e);
+      resolve(); // continuar sin Firebase
+    });
+  });
+}
+
 (async()=>{
-  // 1. Cargar localStorage como estado inicial rápido
+  // 1. Render inicial con localStorage (instantáneo)
   load();
   loadNotifConfig();
   initPhotoUpload();
-  render(); // primer render con datos locales
+  render();
 
-  // 2. Cargar Firebase (sobreescribe con datos en la nube)
-  if(window._FB && window._FB.ok()){
+  // 2. Cargar Firebase SDKs y conectar
+  await initFirebase();
+  if(_db){
     await window._FB.loadAll();
-    window._FB.listen(); // suscripción tiempo real
+    window._FB.listen();
+  } else {
+    fbSetStatus('err');
   }
 
-  // 3. Arranque final
+  // 3. Render final con datos de la nube
   if(autoSync) setAutoSync(true);
-  render(); // segundo render con datos de Firebase
+  render();
   setTimeout(triggerNotificaciones, 800);
 })();
 </script>
