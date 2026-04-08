@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
@@ -471,7 +471,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
   <div class="card heroMain">
     <div class="eyebrow">Tendencys Commercial Excellence</div>
     <h1>Dashboard interactivo</h1>
-    <div class="sub" id="heroSub">Ruta de entregas · Umbrales por rol · Bell desglosado · Cross segmentado · Google Sheets sync.</div>
+    <div class="sub" id="heroSub">Ruta de entregas · Umbrales por puesto · Bell desglosado · Cross segmentado · Google Sheets sync.</div>
   </div>
   <div class="card">
     <div class="small">Top Performer</div>
@@ -682,8 +682,8 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
   <div id="atab-metas" class="adminSection">
     <div class="grid2">
       <div class="card">
-        <div class="small" style="margin-bottom:12px">Meta mensual por rol</div>
-        <div class="sub" style="font-size:13px;margin-bottom:14px">Define la meta de cada rol para el mes en curso. Se mostrará en el tablero y en el panel lateral.</div>
+        <div class="small" style="margin-bottom:12px">Meta mensual por puesto</div>
+        <div class="sub" style="font-size:13px;margin-bottom:14px">Define la meta de cada puesto para el mes en curso. Se mostrará en el tablero y en el panel lateral.</div>
         <div id="metasPorRol"></div>
         <div class="sep"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -724,7 +724,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
             <div>
               <div class="small" style="margin-bottom:5px">Estado</div>
               <select id="retoEstado" class="select">
-                <option value="activo">✅ Activo</option>
+                <option value="activo">🔴 Activo</option>
                 <option value="pasado">⚫ Pasado</option>
               </select>
             </div>
@@ -732,8 +732,8 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
           <input id="retoDescripcion" class="input" placeholder="Descripción del reto *">
           <textarea id="retoDetalle" class="input" placeholder="Detalle adicional del reto…" style="height:60px;resize:none;line-height:1.5"></textarea>
 
-          <!-- Metas por rol dinámicas -->
-          <div class="small" style="margin-bottom:4px">Metas por rol (opcional)</div>
+          <!-- Metas por puesto dinámicas -->
+          <div class="small" style="margin-bottom:4px">Metas por puesto (opcional)</div>
           <div id="retoMetasRoles" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
 
           <input id="retoPremio" class="input" placeholder="Premio (ej. 1 día Home Office + 100 Envia Coins)">
@@ -969,7 +969,7 @@ input[type="color"]{padding:4px;height:38px;cursor:pointer}
       <div class="ruleTitle">Cross-Service Award</div>
       <div class="ruleBody">
         <b>1 punto</b> por cada servicio adicional activado en el mes. Mínimo <b>2 servicios extra</b> para calificar.<br><br>
-        Segmentado por tipo de servicio para que la competencia sea justa entre roles.<br><br>
+        Segmentado por tipo de servicio para que la competencia sea justa entre puestos.<br><br>
         <b>📌 Mes en curso</b>
       </div>
       <div class="rulePrize"><b>🎁 Premio</b>💰 Comisión + 🌐 100 Envia Coins + Gift card</div>
@@ -1127,7 +1127,7 @@ function recordWinner(r){
   const reto = retoActivo();
   if(!reto) return false;
   // Evalúa si el colaborador cumple la meta de su rol en el reto activo
-  const metaRol = reto.metasPorRol && reto.metasPorRol[r.rol];
+  const metaRol = reto.metasPorRol && (reto.metasPorRol[r.puesto] || reto.metasPorRol[r.puesto?.split(' ')[0]]);
   if(metaRol){
     const match = metaRol.match(/HP\s*[>>=]\s*(\d+)/i);
     if(match) return r.hp > parseInt(match[1],10);
@@ -1205,8 +1205,8 @@ function laneHtml(r){
   const veh      = Math.max(4, Math.min(88, metaPct / 2));
   const checks   = [25,50,75,100,94]; // 50%, 100%, 150%, 200%, 🔔
   const checkLabels = ['50%','100%','150%','200%','🔔'];
-  const icon     = r.rol==='MDR'?'🚛 Truck':'📦 Packet';
-  const thr      = hpThresholdForRole(r.rol);
+  const icon     = (r.puesto||'').toLowerCase().includes('market')||r.puesto==='MDR'?'🚛 Truck':'📦 Packet';
+  const thr      = hpThresholdForRole(r.puesto);
   const hpPct    = Math.min(100, Math.round(r.hp/thr*100));
   // Pills
   const pMeta    = r.porcentajeMeta>=200?'ok':r.porcentajeMeta>=150?'':'warn';
@@ -1248,15 +1248,19 @@ function laneHtml(r){
   </div>`;
 }
 
-function hpThresholdForRole(rol){
-  // Busca en el reto activo o usa fallbacks
+function hpThresholdForRole(puesto){
+  // Busca en el reto activo por puesto o usa fallbacks por defecto
   const reto = retoActivo();
-  if(reto && reto.metasPorRol && reto.metasPorRol[rol]){
-    const m = reto.metasPorRol[rol].match(/HP\s*[>>=]\s*(\d+)/i);
+  if(reto && reto.metasPorRol && reto.metasPorRol[puesto]){
+    const m = reto.metasPorRol[puesto].match(/HP\s*[>>=]\s*(\d+)/i);
     if(m) return parseInt(m[1],10);
   }
-  const def = {SDR:15,MDR:30,BDR:20,AE:25};
-  return def[rol]||20;
+  // Fallbacks por nombre de puesto
+  const p = (puesto||'').toLowerCase();
+  if(p.includes('market') || p.includes('mdr')) return 30;
+  if(p.includes('business') || p.includes('bdr')) return 20;
+  if(p.includes('account') || p.includes('ae')) return 25;
+  return 15; // default para Sales Rep / SDR
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1406,8 +1410,9 @@ function parseCsv(text){
     transformHeader:h=>h.trim().toLowerCase().replace(/\s+/g,'')});
   return r.data.map((o,i)=>({
     id:Date.now()+i,
-    nombre:(o.nombre||`Col ${i+1}`).trim(), rol:(o.rol||'SDR').trim(),
-    puesto:(o.puesto||'').trim(),
+    nombre:(o.nombre||`Col ${i+1}`).trim(),
+    puesto:(o.puesto||o.rol||'').trim(),
+    pais:(o.pais||'').trim(),
     servicio:(o.servicio||'General').trim(), tipoServicio:(o.tiposervicio||o.servicio||'General').trim(),
     porcentajeMeta:toNum(o.porcentajemeta||o['%meta']||0), hp:toNum(o.hp||0),
     serviciosExtra:toNum(o.serviciosextra||o.cross||0),
@@ -1605,8 +1610,8 @@ function renderTop(list){
       ${avatarHtml(top,52)}
       <div>
         <div class="topName">${esc(top.nombre)}</div>
-        <div style="color:var(--cyan);font-size:12px;font-weight:700">${esc(top.puesto||top.rol)}</div>
-        <div class="topMeta">${esc(top.rol)} · ${esc(top.servicio)}</div>
+        <div style="color:var(--cyan);font-size:12px;font-weight:700">${esc(top.puesto||'—')}</div>
+        <div class="topMeta">${esc(top.servicio)}</div>
         ${top.fechaIngreso?`<div style="font-size:11px;color:var(--muted)">${esc(antStr)} en la empresa</div>`:''}
       </div>
     </div>
@@ -1635,7 +1640,7 @@ function renderStats(){
     ['🥇 Double Award',  dobles.length, primerDouble
       ? `1° lugar: ${esc(primerDouble.nombre)}${primerDouble.fechaDoble?' · '+formatFecha(primerDouble.fechaDoble):''}`
       : 'Sin ganadores aún'],
-    ['⚡ Récord',         rows.filter(r=>recordWinner(r)).length, 'HP sobre umbral del rol'],
+    ['⚡ Récord',         rows.filter(r=>recordWinner(r)).length, 'HP sobre umbral del puesto'],
     ['🔗 Cross-Service',  rows.filter(r=>crossWinner(r)).length,  'Líder en su tipo de servicio'],
     ['🔔 Bell Completo',  rows.filter(r=>bellTotal(r)>=3).length,
       bellPendientes>0?`⚠️ ${bellPendientes} bono${bellPendientes>1?'s':''} pendiente${bellPendientes>1?'s':''} de pago`:'Todos los bonos al día']
@@ -1678,8 +1683,8 @@ function renderRetoBox(){
     if(!reto){ box.innerHTML='<div class="sub">Sin reto activo. Crea uno en Administrador → Retos.</div>'; }
     else {
       const metasHtml = Object.entries(reto.metasPorRol||{})
-        .map(([rol,meta])=>`<div class="info" style="border-color:rgba(0,175,192,.2);padding:10px 12px">
-          <div class="small">${esc(rol)}</div>
+        .map(([puesto,meta])=>`<div class="info" style="border-color:rgba(0,175,192,.2);padding:10px 12px">
+          <div class="small">${esc(puesto)}</div>
           <div style="font-weight:900;margin-top:4px;color:var(--cyan);font-size:15px">${esc(meta)}</div>
         </div>`).join('');
       box.innerHTML=`
@@ -1736,13 +1741,13 @@ function renderRetoBox(){
       // Metas por rol
       const entries = Object.entries(reto.metasPorRol||{});
       if(entries.length){
-        const b = document.createElement('b'); b.textContent = 'Metas por rol:';
+        const b = document.createElement('b'); b.textContent = 'Metas por puesto:';
         bodyEl.appendChild(b);
         const ul = document.createElement('ul');
         ul.style.cssText='padding-left:18px;margin:6px 0 10px';
-        entries.forEach(([rol,meta])=>{
+        entries.forEach(([puesto,meta])=>{
           const li = document.createElement('li');
-          li.textContent = `${rol} → ${meta}`;
+          li.textContent = `${puesto} → ${meta}`;
           ul.appendChild(li);
         });
         bodyEl.appendChild(ul);
@@ -1803,8 +1808,8 @@ function renderMetasBox(){
   const tipos={porcentaje:'%',cantidad:'uds',monto:'$'};
   const suf=tipos[meta.tipo]||'';
   const metasHtml=Object.entries(meta.metas||{})
-    .map(([rol,val])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">
-      <span style="color:var(--muted)">${esc(rol)}</span>
+    .map(([puesto,val])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">
+      <span style="color:var(--muted)">${esc(puesto)}</span>
       <span style="font-weight:900;color:var(--cyan)">${esc(val)} ${suf}</span>
     </div>`).join('');
   $('metasBox').innerHTML=`
@@ -1832,12 +1837,12 @@ function renderScoreFormula(){
 // RENDER HP RACE
 // ═══════════════════════════════════════════════════════
 function renderHpRace(){
-  const rolesPresentes=[...new Set(rows.map(r=>r.rol))].sort();
-  $('hpRace').innerHTML=rolesPresentes.map(rol=>{
-    const thr=hpThresholdForRole(rol);
-    const top=[...rows].filter(r=>r.rol===rol).sort((a,b)=>b.hp-a.hp).slice(0,3);
+  const puestosPresentes=[...new Set(rows.map(r=>r.puesto||'').filter(Boolean))].sort();
+  $('hpRace').innerHTML=puestosPresentes.map(puesto=>{
+    const thr=hpThresholdForRole(puesto);
+    const top=[...rows].filter(r=>r.puesto===puesto).sort((a,b)=>b.hp-a.hp).slice(0,3);
     return `<div style="margin-bottom:14px">
-      <div class="small" style="margin-bottom:7px">${esc(rol)} — umbral HP > ${thr}</div>
+      <div class="small" style="margin-bottom:7px">${esc(puesto)} — umbral HP > ${thr}</div>
       ${top.map(r=>{
         const pct=Math.min(100,Math.round(r.hp/thr*100));
         const done=r.hp>thr;
@@ -1881,8 +1886,8 @@ function renderAdminColab(){
         ${avatarHtml(r,44)}
         <div style="flex:1;min-width:0">
           <div style="font-weight:900;font-size:15px">${esc(r.nombre)}</div>
-          <div style="font-size:11px;color:var(--cyan);font-weight:700">${esc(r.puesto||r.rol)}</div>
-          <div style="font-size:11px;color:var(--muted)">${esc(r.rol)} · ${esc(r.servicio)} ${r.fechaIngreso?'· '+formatFecha(r.fechaIngreso):''}</div>
+          <div style="font-size:11px;color:var(--cyan);font-weight:700">${esc(r.puesto||'—')}</div>
+          <div style="font-size:11px;color:var(--muted)">${esc(r.puesto||'—')} · ${esc(r.pais||'—')} · ${esc(r.servicio)} ${r.fechaIngreso?'· '+formatFecha(r.fechaIngreso):''}</div>
           <div style="font-size:12px;margin-top:4px">Meta <b>${esc(String(r.porcentajeMeta))}%</b> · HP <b>${esc(String(r.hp))}</b> · Cross <b>${esc(String(r.serviciosExtra))}</b>${toNum(r.serviciosExtra)<2?' <span style="color:#ffb088;font-size:10px">(no califica)</span>':''}</div>
           <div style="margin-top:3px">${bellBadge}</div>
           ${r.fechaDoble?`<div style="font-size:10px;color:#ffb088;margin-top:2px">🥇 Alcanzó 200%: ${formatFecha(r.fechaDoble)}</div>`:''}
@@ -1923,13 +1928,13 @@ function renderPuestosAdmin(){
 // RENDER ADMIN — METAS MENSUALES
 // ═══════════════════════════════════════════════════════
 function renderMetasAdmin(){
-  // Campos por rol
+  // Campos por puesto
   const cont=$('metasPorRol');
   if(cont){
-    cont.innerHTML=roles.map(r=>`
+    cont.innerHTML=puestos.map(p=>`
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="min-width:60px;font-size:13px;font-weight:700;color:var(--cyan)">${esc(r)}</span>
-        <input class="input" data-metatipo="${esc(r)}" placeholder="Meta para ${esc(r)}" value="${esc((metaActivaMes()&&metaActivaMes().metas&&metaActivaMes().metas[r])||'')}">
+        <span style="min-width:120px;font-size:13px;font-weight:700;color:var(--cyan)">${esc(p)}</span>
+        <input class="input" data-metatipo="${esc(p)}" placeholder="Meta para ${esc(p)}" value="${esc((metaActivaMes()&&metaActivaMes().metas&&metaActivaMes().metas[p])||'')}">
       </div>`).join('');
   }
   if($('metaMes'))   $('metaMes').value   = (metaActivaMes()&&metaActivaMes().mes)||'';
@@ -1956,13 +1961,13 @@ function renderMetasAdmin(){
 // RENDER ADMIN — RETOS
 // ═══════════════════════════════════════════════════════
 function renderRetosAdmin(){
-  // Metas por rol en el form de reto
+  // Metas por puesto en el form de reto
   const cont=$('retoMetasRoles');
   if(cont){
-    cont.innerHTML=roles.map(r=>`
+    cont.innerHTML=puestos.map(p=>`
       <div>
-        <div class="small" style="margin-bottom:4px">${esc(r)}</div>
-        <input class="input" data-reto-rol="${esc(r)}" placeholder="Meta ${esc(r)} (ej. HP > 15)">
+        <div class="small" style="margin-bottom:4px">${esc(p)}</div>
+        <input class="input" data-reto-rol="${esc(p)}" placeholder="Meta ${esc(p)} (ej. HP > 15)">
       </div>`).join('');
   }
 
